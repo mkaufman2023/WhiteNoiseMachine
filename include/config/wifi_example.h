@@ -13,7 +13,7 @@
 // Rename this file to wifi.h and fill in WiFi credentials
 namespace wifi
 {
-    namespace matt
+    namespace matthew
     {
         constexpr const char* ssid = "";
         constexpr const char* password = "";

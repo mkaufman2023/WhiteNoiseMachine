@@ -14,6 +14,8 @@
 namespace webserver
 {
     constexpr int port = 80;
+    const char* hostname = "whitenoise";
+    const char* hostname_full = "http://whitenoise.local";
 }
 
 
