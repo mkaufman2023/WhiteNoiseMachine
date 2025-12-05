@@ -61,11 +61,11 @@ public:
     bool is_online() const;
 
 private:
-    int _esp32_rx;
-    int _esp32_tx;
-    bool _is_online;
-    HardwareSerial& _serial;
-    DFRobotDFPlayerMini _driver;
+    int _esp32_rx;                  /**< ESP32 pin connected to DFPlayer TX */
+    int _esp32_tx;                  /**< ESP32 pin connected to DFPlayer RX */
+    bool _is_online;                /**< Flag indicating if DFPlayer initialized successfully */
+    HardwareSerial& _serial;        /**< Reference to the hardware serial port used */
+    DFRobotDFPlayerMini _driver;    /**< DFRobotDFPlayerMini instance as the driver */
 };
 
 
