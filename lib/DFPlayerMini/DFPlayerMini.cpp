@@ -58,6 +58,7 @@ void DFPlayerMini::begin(bool debug)
 
     // Initialize serial connection
     Serial1.begin(9600, SERIAL_8N1, _mcu_rx, _mcu_tx);
+    delay(2500);
     _serial = &Serial1;
     
     if (_show_debug_messages) {
@@ -628,6 +629,13 @@ void DFPlayerMini::_send_command(byte command, byte data2)
  **/
 void DFPlayerMini::_send_command(byte command, byte data1, byte data2)
 {
+    if (_serial == nullptr) {
+        if (_show_debug_messages) {
+            Serial.println("DFPlayerMini: _send_command called before begin()");
+        }
+        return;
+    }
+
     byte send_buf[8] = {0};    // Initialize data bytes buffer
     String send_str = "";      // Initialize string data buffer
 

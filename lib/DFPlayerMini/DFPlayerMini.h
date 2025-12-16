@@ -23,74 +23,74 @@ public:
 
     void begin(bool debug = false);
 
-    void play_next();       // void playNext();
-    void play_previous();   // void playPrevious();
+    void play_next();
+    void play_previous();
     
-    void play_track(int track);     // void play(byte track_num);
-    void play_track(byte track);    // void play(byte track_num);
+    void play_track(int track);
+    void play_track(byte track);
 
-    void play_track_in_folder(int folder, int track);       // void playF(byte f, byte n);
-    void play_track_in_folder(byte folder, byte track);     // void playF(byte f, byte n);
+    void play_track_in_folder(int folder, int track);
+    void play_track_in_folder(byte folder, byte track);
 
-    void loop_track(int track);     // void playSL(byte n);
-    void loop_track(byte track);    // void playSL(byte n);
+    void loop_track(int track);
+    void loop_track(byte track);
 
-    void loop_track_in_folder(int folder, int track);    // void playSL(byte f, byte n);
-    void loop_track_in_folder(byte folder, byte track);  // void playSL(byte f, byte n);
+    void loop_track_in_folder(int folder, int track);
+    void loop_track_in_folder(byte folder, byte track);
 
     // void play_folder(int folder);   // void playF(byte f);
     // void play_folder(byte folder);  // void playF(byte f);
 
-    void loop_folder(int folder);   // void loopFolder(byte f);
-    void loop_folder(byte folder);  // void loopFolder(byte f);
+    void loop_folder(int folder);
+    void loop_folder(byte folder);
 
-    void loop_all_tracks();     // void playAllLoop();
+    void loop_all_tracks();
 
-    void shuffle_all_tracks();  // void playShuffle();
+    void shuffle_all_tracks();
 
-    void start_looping_current_track(); // void playL(bool on);
-    void stop_looping_current_track();  // void playL(bool on);
+    void start_looping_current_track();
+    void stop_looping_current_track();
     
-    void set_folder(int folder);    // void setFolder(byte n);
-    void set_folder(byte folder);   // void setFolder(byte n);
+    void set_folder(int folder);
+    void set_folder(byte folder);
 
-    void set_source(int source);    // void setSource(byte d);
-    void set_source(byte source);   // void setSource(byte d);
+    void set_source(int source);
+    void set_source(byte source);
 
-    void increment_volume();    // void volUp();
-    void decrement_volume();    // void volDown();
-    void set_volume(int volume);    // void setVol(byte v);
-    void set_volume(byte volume);   // void setVol(byte v);
-    void set_power_on_volume(int volume);    // void setPowerOnVol(byte v);
-    void set_power_on_volume(byte volume);   // void setPowerOnVol(byte v);
+    void increment_volume();
+    void decrement_volume();
+    void set_volume(int volume);
+    void set_volume(byte volume);
+    void set_power_on_volume(int volume);
+    void set_power_on_volume(byte volume);
 
-    void set_EQ(int eq);    // void setEq(byte e);
-    void set_EQ(byte eq);   // void setEq(byte e);
+    void set_EQ(int eq);
+    void set_EQ(byte eq);
 
-    void play();    // void play();
-    void pause();   // void pause();
-    void stop_all_playback();   // void stop();
+    void play();
+    void pause();
+    void stop_all_playback();
     
-    void reset();   // void reset();
+    void reset();
 
-    void enable_DAC();    // void setDacHighImp(byte n);
-    void disable_DAC();   // void setDacHighImp(byte n);
+    void enable_DAC();
+    void disable_DAC();
 
-    void sleep();   // void sleep();
-    void wakeup();  // void wakeup();
+    void sleep();
+    void wakeup();
 
-    uint16_t get_status();    // uint16_t qStatus();
-    uint16_t get_volume();    // uint16_t qVolume();
-    uint16_t get_folder_count();    // uint16_t qTFolders();
-    uint16_t get_folder_track_count();   // uint16_t qFTracks();
-    uint16_t get_total_track_count();    // uint16_t qTTracks();
+    uint16_t get_status();
+    uint16_t get_volume();
+    uint16_t get_folder_count();
+    uint16_t get_folder_track_count();
+    uint16_t get_total_track_count();
     // uint16_t get_currently_playing_track(); // uint16_t qPlaying();
 
 private:
     int _mcu_rx;    // MCU RX pin
     int _mcu_tx;    // MCU TX pin
 
-    Stream* _serial;                // Serial stream
+    Stream* _serial = nullptr;      // Serial stream
     byte    _ansbuf[15] = {0};      // Response buffer
     bool    _show_debug_messages;   // Show debug flag
 
