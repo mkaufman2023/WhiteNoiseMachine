@@ -21,9 +21,18 @@
             padding: 1.5rem;
             text-align: center;
             padding-top: env(safe-area-inset-top, 20px);
+            padding-bottom: 3rem;
         }
         h1 {
             margin-bottom: 0.5rem;
+        }
+        h2 {
+            font-size: 1.1rem;
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            color: #9ca3af;
+            border-top: 1px solid #374151;
+            padding-top: 1.5rem;
         }
         .subtitle {
             font-size: 0.9rem;
@@ -33,6 +42,14 @@
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.75rem;
+            max-width: 480px;
+            margin: 0 auto;
+        }
+        /* Specific style for control buttons to distinguish them slightly */
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
             gap: 0.75rem;
             max-width: 480px;
             margin: 0 auto;
@@ -48,6 +65,7 @@
             color: #e5e7eb;
             box-shadow: 0 8px 16px rgba(0,0,0,0.35);
             transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.15s ease;
+            -webkit-tap-highlight-color: transparent;
         }
         button:hover {
             transform: translateY(-1px);
@@ -59,11 +77,17 @@
             box-shadow: 0 6px 10px rgba(0,0,0,0.4);
             background: #111827;
         }
+        /* Style specifically for the darker control buttons */
+        .btn-control {
+            background: #252f3f;
+            font-size: 0.9rem;
+        }
         .status {
             margin-top: 1.5rem;
             font-size: 0.85rem;
             color: #9ca3af;
             min-height: 1.2em;
+            font-family: monospace;
         }
         .warning-banner {
             background-color: #ef4444;
@@ -75,14 +99,44 @@
             display: none;  /* Hidden by default */
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
+        /* NEW: Terminal / Serial Monitor Styles */
+        .terminal-container {
+            max-width: 480px;
+            margin: 0 auto;
+            text-align: left;
+        }
+        .terminal-window {
+            background-color: #000;
+            color: #00ff00; /* Classic Terminal Green */
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.8rem;
+            padding: 12px;
+            height: 200px;
+            overflow-y: auto;
+            border-radius: 0.5rem;
+            border: 1px solid #374151;
+            white-space: pre-wrap; /* Preserves line breaks from backend */
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+            margin-bottom: 0.5rem;
+        }
+        .terminal-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .terminal-status {
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
     </style>
 </head>
 <body>
     <div id="hw-alert" class="warning-banner">
         ⚠ Hardware Failure: DFPlayer not detected. Check internal wiring/SD card.
     </div>
+
     <h1>White Noise Machine</h1>
-    <div class="subtitle">Tap a sound to start playing it.</div>
+    <div class="subtitle">Select a sound</div>
 
     <div class="grid">
         <button onclick="play_track(1)">✈ Airplane Cabin</button>
@@ -100,11 +154,41 @@
         <button onclick="play_track(13)">🧹 Vacuum Cleaner</button>
     </div>
 
-    <div class="status" id="status"></div>
+    <h2>Playback Controls</h2>
+    <div class="control-grid">
+        <button class="btn-control" onclick="control('previous')">⏮ Prev</button>
+        <button class="btn-control" onclick="control('pause')">⏸ Pause</button>
+        <button class="btn-control" onclick="control('resume')">▶ Resume</button>
+        <button class="btn-control" onclick="control('next')">⏭ Next</button>
+        
+        <button class="btn-control" onclick="control('volume_down')">🔉 Vol -</button>
+        <button class="btn-control" onclick="control('stop')">⏹ Stop</button>
+        <button class="btn-control" onclick="control('volume_up')">🔊 Vol +</button>
+
+        <button class="btn-control" onclick="control('start_repeat')">🔁 Loop On</button>
+        <button class="btn-control" onclick="control('stop_repeat')">➡ Loop Off</button>
+        <button class="btn-control" onclick="control('set_eq_normal')">Set EQ Normal</button>
+        <button class="btn-control" onclick="control('set_eq_rock')">Set EQ Rock</button>
+        <button class="btn-control" onclick="control('set_eq_pop')">Set EQ Pop</button>
+    </div>
+
+    <h2>Web Serial Monitor</h2>
+    <div class="terminal-container">
+        <div id="terminal" class="terminal-window">Waiting for logs...</div>
+        <div class="terminal-controls">
+            <span class="terminal-status">Polling /log every 2s</span>
+            <button class="btn-control" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="clearTerminal()">Clear</button>
+        </div>
+    </div>
+
+    <div class="status" id="status">Ready</div>
 
     <script>
+        const terminal = document.getElementById('terminal');
+        const status_element = document.getElementById('status');
+
+        // Logic for playing specific tracks
         async function play_track(n) {
-            const status_element = document.getElementById('status');
             status_element.textContent = 'Switching to track ' + n + '...';
             try {
                 const result = await fetch('/play?track=' + encodeURIComponent(n));
@@ -119,6 +203,43 @@
             }
         };
 
+        // Logic for generic control buttons
+        async function control(command) {
+            status_element.textContent = 'Sending: ' + command + '...';
+            try {
+                // Hits endpoints like /next, /stop, /vol_up
+                const result = await fetch('/' + command);
+                if (!result.ok) {
+                    status_element.textContent = 'Error: ' + result.status;
+                    return;
+                }
+                status_element.textContent = 'Command executed: ' + command;
+            } catch (e) {
+                status_element.textContent = 'Command failed: ' + command;
+            }
+        }
+
+        // Serial Monitor Logic
+        function clearTerminal() {
+            terminal.textContent = '';
+        }
+        async function fetchLogs() {
+            try {
+                // Requires backend to have a route '/log' that returns text
+                const response = await fetch('/log'); 
+                if (response.ok) {
+                    const text = await response.text();
+                    if (text && text.length > 0) {
+                        terminal.textContent += text;
+                        // Auto-scroll to bottom
+                        terminal.scrollTop = terminal.scrollHeight;
+                    }
+                }
+            } catch (e) {
+                // Fail silently to avoid spamming console
+            }
+        }
+
         window.onload = async function() {
             try {
                 const result = await fetch('/status');
@@ -130,6 +251,9 @@
             } catch (e) {
                 console.log("Could not fetch status");
             }
+
+            // Start the log polling loop (every 2000ms)
+            setInterval(fetchLogs, 2000);
         };
     </script>
 </body>
