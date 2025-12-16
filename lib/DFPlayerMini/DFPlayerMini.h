@@ -1,71 +1,108 @@
-/******************************************************************
-*                                                                 *
-*    lib / DFPlayerMini / DFPlayerMini.h                          *
-*    Created by Matt Kaufman, December 4, 2025.                   *
-*                                                                 *
-*    Declaration of the DFPlayerMini class                        *
-*      designed to control the DFPlayer Mini MP3 module.          *
-*                                                                 *
-*******************************************************************/
+/****************************************************************************************
+*                                                                                       *
+*   DFPlayerMini.h - Library for TD5580A-based DFPlayer Mini clones                     *
+*                                                                                       *
+*   Adapted from https://github.com/keith721/TD5580A                                    *
+*   Adapted for HiLetgo's clone (see: 2) by Matt Kaufman, December, 2025.               *
+*                                                                                       *
+*   See:                                                                                *
+*     1. http://www.tudasemi.com/static/upload/file/20240905/1725499313437991.pdf       *
+*     2. https://www.amazon.com/HiLetgo-Arduino-Player-Module-DFPlayer/dp/B01D1D0E7Q    *
+*                                                                                       *
+*****************************************************************************************/
 
 #ifndef DF_PLAYER_MINI_H
 #define DF_PLAYER_MINI_H
 
 #include <Arduino.h>
-#include <DFRobotDFPlayerMini.h>
 
 
 class DFPlayerMini {
 public:
-    /**
-     * Constructor for DFPlayerMini class.
-     * @param esp32_rx The ESP32 pin connected to DFPlayer TX (default `20`)
-     * @param esp32_tx The ESP32 pin connected to DFPlayer RX (default `21`)
-     * @param serial The hardware serial port to use (default `Serial1`)
-     */
-    DFPlayerMini(int esp32_rx = 20, int esp32_tx = 21, HardwareSerial& serial = Serial1);
+    DFPlayerMini(int mcu_rx = D7, int mcu_tx = D6);
+
+    void begin(bool debug = false);
+
+    void play_next();       // void playNext();
+    void play_previous();   // void playPrevious();
     
-    /**
-     * Initializes the Serial connection and the DFPlayer hardware.
-     * @return `true` if communication succeeded, `false` otherwise.
-     */
-    bool begin();
+    void play_track(int track);     // void play(byte track_num);
+    void play_track(byte track);    // void play(byte track_num);
 
-    /**
-     * Sets the volume (range from 0-30).
-     * @param volume The desired volume level.
-     */
-    void set_volume(int volume);
+    void play_track_in_folder(int folder, int track);       // void playF(byte f, byte n);
+    void play_track_in_folder(byte folder, byte track);     // void playF(byte f, byte n);
 
-    /**
-     * Loops a specific track number indefinitely.
-     * @param track The track number to loop.
-     */
-    void loop_track(int track);
+    void loop_track(int track);     // void playSL(byte n);
+    void loop_track(byte track);    // void playSL(byte n);
 
-    /**
-     * Stops playback.
-     */
-    void stop_playing();
+    void loop_track_in_folder(int folder, int track);    // void playSL(byte f, byte n);
+    void loop_track_in_folder(byte folder, byte track);  // void playSL(byte f, byte n);
 
-    /**
-     * Checks if the DFPlayer is currently playing audio.
-     * @return `true` if playing, `false` otherwise.
-     */
-    bool is_playing();
+    // void play_folder(int folder);   // void playF(byte f);
+    // void play_folder(byte folder);  // void playF(byte f);
 
-    /**
-     * Checks if the DFPlayer has been successfully initialized.
-     * @return `true` if initialized, `false` otherwise.
-     */
-    bool is_online() const;
+    void loop_folder(int folder);   // void loopFolder(byte f);
+    void loop_folder(byte folder);  // void loopFolder(byte f);
+
+    void loop_all_tracks();     // void playAllLoop();
+
+    void shuffle_all_tracks();  // void playShuffle();
+
+    void start_looping_current_track(); // void playL(bool on);
+    void stop_looping_current_track();  // void playL(bool on);
+    
+    void set_folder(int folder);    // void setFolder(byte n);
+    void set_folder(byte folder);   // void setFolder(byte n);
+
+    void set_source(int source);    // void setSource(byte d);
+    void set_source(byte source);   // void setSource(byte d);
+
+    void increment_volume();    // void volUp();
+    void decrement_volume();    // void volDown();
+    void set_volume(int volume);    // void setVol(byte v);
+    void set_volume(byte volume);   // void setVol(byte v);
+    void set_power_on_volume(int volume);    // void setPowerOnVol(byte v);
+    void set_power_on_volume(byte volume);   // void setPowerOnVol(byte v);
+
+    void set_EQ(int eq);    // void setEq(byte e);
+    void set_EQ(byte eq);   // void setEq(byte e);
+
+    void play();    // void play();
+    void pause();   // void pause();
+    void stop_all_playback();   // void stop();
+    
+    void reset();   // void reset();
+
+    void enable_DAC();    // void setDacHighImp(byte n);
+    void disable_DAC();   // void setDacHighImp(byte n);
+
+    void sleep();   // void sleep();
+    void wakeup();  // void wakeup();
+
+    uint16_t get_status();    // uint16_t qStatus();
+    uint16_t get_volume();    // uint16_t qVolume();
+    uint16_t get_folder_count();    // uint16_t qTFolders();
+    uint16_t get_folder_track_count();   // uint16_t qFTracks();
+    uint16_t get_total_track_count();    // uint16_t qTTracks();
+    // uint16_t get_currently_playing_track(); // uint16_t qPlaying();
 
 private:
-    int _esp32_rx;                  /**< ESP32 pin connected to DFPlayer TX */
-    int _esp32_tx;                  /**< ESP32 pin connected to DFPlayer RX */
-    bool _is_online;                /**< Flag indicating if DFPlayer initialized successfully */
-    HardwareSerial& _serial;        /**< Reference to the hardware serial port used */
-    DFRobotDFPlayerMini _driver;    /**< DFRobotDFPlayerMini instance as the driver */
+    int _mcu_rx;    // MCU RX pin
+    int _mcu_tx;    // MCU TX pin
+
+    Stream* _serial;                // Serial stream
+    byte    _ansbuf[15] = {0};      // Response buffer
+    bool    _show_debug_messages;   // Show debug flag
+
+    String _sanswer();
+    String _sbyte2hex(byte b);
+    // int    _shex2int(char *s, int n);
+
+    uint16_t _read_response();
+
+    void _send_command(byte command);
+    void _send_command(byte command, byte data2);
+    void _send_command(byte command, byte data1, byte data2);
 };
 
 
