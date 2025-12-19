@@ -1,6 +1,7 @@
 /****************************************************************************************
 *                                                                                       *
-*   DFPlayerMini.cpp - Library for TD5580A-based DFPlayer Mini clones                   *
+*   DFPlayerMini.cpp                                                                    *
+*   Library for TD5580A-based DFPlayer Mini clones                                      *
 *                                                                                       *
 *   Adapted from https://github.com/keith721/TD5580A                                    *
 *   Adapted for HiLetgo's clone (see: 2) by Matt Kaufman, December, 2025.               *
@@ -664,7 +665,7 @@ void DFPlayerMini::_send_command(byte command, byte data1, byte data2)
         Serial.println(send_str);     // Display hex bytes sent to DFPlayer
     }
 
-    delay(1000);
+    delay(500);
 }
 
 
