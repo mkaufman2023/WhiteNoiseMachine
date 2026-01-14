@@ -1,12 +1,11 @@
-/******************************************************************
-*                                                                 *
-*    lib / WebApp / WebApp.cpp                                    *
-*    Created by Matt Kaufman, December 5, 2025.                   *
-*                                                                 *
-*    Implementation of the WebApp class designed to               *
-*      handle routes, play/status handlers, and mDNS setup.       *
-*                                                                 *
-*******************************************************************/
+/*************************************************************************
+*                                                                        *
+*   WebApp.cpp                                                           *
+*   Library for handling static and dynamic routes and mDNS setup.       *
+*                                                                        *
+*   Written by Matt Kaufman - December 5, 2025                           *
+*                                                                        *
+**************************************************************************/
 
 #include "WebApp.h"
 
@@ -15,7 +14,14 @@
 #include <ESPmDNS.h>
 #include <SPIFFS.h>
 #include <DFPlayerMini.h>
-#include <config/webserver.h>
+
+
+namespace webserver
+{
+    constexpr int port = 80;
+    const char* hostname = "whitenoise";
+    const char* hostname_full = "http://whitenoise.local";
+}
 
 
 

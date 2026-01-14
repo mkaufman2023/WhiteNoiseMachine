@@ -5,4 +5,3 @@
 .vscode/ipch
 include/config/wifi.h
 mp3_names.txt
-og_sketch.ino

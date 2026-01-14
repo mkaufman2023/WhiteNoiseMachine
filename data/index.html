@@ -136,7 +136,7 @@
     </div>
 
     <h1>White Noise Machine</h1>
-    <div class="subtitle">Select a sound</div>
+    <div class="subtitle">Select a sound to play it</div>
 
     <div class="grid">
         <button onclick="play_track(1)">✈ Airplane Cabin</button>
@@ -151,28 +151,30 @@
         <button onclick="play_track(10)">🔥 Campfire</button>
         <button onclick="play_track(11)">🚿 Shower</button>
         <button onclick="play_track(12)">💨 Hairdryer</button>
-        <button onclick="play_track(13)">🧹 Vacuum Cleaner</button>
+        <button onclick="play_track(13)">🧹 Vacuum</button>
+        <button onclick="play_track(14)">🍲 Soup</button>
     </div>
 
     <h2>Playback Controls</h2>
     <div class="control-grid">
         <button class="btn-control" onclick="control('previous')">⏮ Prev</button>
         <button class="btn-control" onclick="control('pause')">⏸ Pause</button>
-        <button class="btn-control" onclick="control('resume')">▶ Resume</button>
         <button class="btn-control" onclick="control('next')">⏭ Next</button>
-        
-        <button class="btn-control" onclick="control('volume_down')">🔉 Vol -</button>
-        <button class="btn-control" onclick="control('stop')">⏹ Stop</button>
-        <button class="btn-control" onclick="control('volume_up')">🔊 Vol +</button>
 
+        <button class="btn-control" onclick="control('volume_down')">🔉 Vol -</button>
+        <button class="btn-control" onclick="control('resume')">▶ Resume</button>
+        <button class="btn-control" onclick="control('volume_up')">🔊 Vol +</button>
+        
         <button class="btn-control" onclick="control('start_repeat')">🔁 Loop On</button>
+        <button class="btn-control" onclick="control('stop')">⏹ Stop</button>
         <button class="btn-control" onclick="control('stop_repeat')">➡ Loop Off</button>
-        <button class="btn-control" onclick="control('set_eq_normal')">Set EQ Normal</button>
+        
+        <!-- <button class="btn-control" onclick="control('set_eq_normal')">Set EQ Normal</button>
         <button class="btn-control" onclick="control('set_eq_rock')">Set EQ Rock</button>
-        <button class="btn-control" onclick="control('set_eq_pop')">Set EQ Pop</button>
+        <button class="btn-control" onclick="control('set_eq_pop')">Set EQ Pop</button> -->
     </div>
 
-    <h2>Web Serial Monitor</h2>
+    <h2>Serial Monitor</h2>
     <div class="terminal-container">
         <div id="terminal" class="terminal-window">Waiting for logs...</div>
         <div class="terminal-controls">

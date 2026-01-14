@@ -1,6 +1,6 @@
 {
     "name": "White Noise Machine",
-    "short_name": "WhiteNoise",
+    "short_name": "White Noise",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#111827",

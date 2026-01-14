@@ -1,12 +1,12 @@
-/******************************************************************
-*                                                                 *
-*    lib / WebApp / WebApp.h                                      *
-*    Created by Matt Kaufman, December 5, 2025.                   *
-*                                                                 *
-*    Declaration of the WebApp class designed to                  *
-*      handle routes, play/status handlers, and mDNS setup.       *
-*                                                                 *
-*******************************************************************/
+/*************************************************************************
+*                                                                        *
+*   WebApp.h                                                             *
+*   Library for handling static and dynamic routes and mDNS setup.       *
+*                                                                        *
+*   Written by Matt Kaufman - December 5, 2025                           *
+*                                                                        *
+**************************************************************************/
+
 
 #ifndef WEB_APP_H
 #define WEB_APP_H
