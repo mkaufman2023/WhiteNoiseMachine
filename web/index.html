@@ -318,6 +318,40 @@ footer button[data-on="1"] { color: var(--accent); border-color: var(--accent); 
   border: 1px solid var(--rule);
 }
 
+/* Firmware update, at the bottom of Diagnostics. */
+.update { display: grid; gap: 0.7rem; margin-top: 1.2rem; }
+.update input { font-family: inherit; color: var(--bone); min-width: 0; }
+.update input[type=file] { font-size: 0.72rem; }
+.update input[type=file]::file-selector-button,
+#upGo {
+  padding: 0.7rem 1rem;
+  margin-right: 0.8rem;
+  font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: var(--panel);
+  color: var(--dim);
+}
+.update-row { display: flex; gap: 0.6rem; }
+#upKey {
+  flex: 1;
+  padding: 0.6rem 0.7rem;
+  font-size: 1rem;            /* 16px: iOS zooms the page into any smaller field */
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+}
+#upKey:focus { outline: none; border-color: var(--accent); }
+#upGo { margin-right: 0; color: var(--accent); border-color: var(--accent); }
+#upGo:disabled { opacity: 0.4; }
+.bar { height: 2px; background: var(--rule); }
+.bar span { display: block; height: 100%; width: 0; background: var(--accent); }
+#upMsg { font-size: 0.68rem; line-height: 1.5; color: var(--dim); min-height: 1.5em; }
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
@@ -375,8 +409,20 @@ footer button[data-on="1"] { color: var(--accent); border-color: var(--accent); 
     <span>Uptime</span><span id="dUp">&mdash;</span>
     <span>Track</span><span id="dTrack">&mdash;</span>
     <span>UI build</span><span id="dUi">&mdash;</span>
+    <span>Firmware</span><span id="dFw">&mdash;</span>
   </div>
   <div id="term" class="mono">Diagnostics open. Log streaming.</div>
+
+  <div class="update">
+    <div class="eyebrow">Update firmware</div>
+    <input type="file" id="upFile" aria-label="Firmware file (firmware.bin)">
+    <div class="update-row">
+      <input type="password" id="upKey" placeholder="Update key" autocomplete="off" aria-label="Update key">
+      <button id="upGo">Install</button>
+    </div>
+    <div class="bar" id="upBar" hidden><span></span></div>
+    <div class="mono" id="upMsg"></div>
+  </div>
 </section>
 
 <script>
@@ -396,8 +442,9 @@ const pad2 = n => String(n).padStart(2, "0");
 
 const el = id => document.getElementById(id);
 let ws = null, backoff = 500, dragging = false, lastSent = 0, diagOpen = false;
+let newUiComing = Promise.resolve(false);   /* per connection: true if the page is about to reload onto a new UI */
 let state = { play:false, trk:1, vol:0, vnow:0, fade:false, hw:0, favs:0,
-              rssi:0, ip:"", mdns:false, up:0 };
+              rssi:0, ip:"", mdns:false, up:0, ui:"", fw:"", rb:false };
 
 /* Audio module status, as reported by the box (Player::Hw). */
 const HW_WARMING = 0, HW_FAULT = 3;
@@ -412,6 +459,14 @@ function connect() {
     setLamp(true);
     if (diagOpen) send("log_on");
     send("state");
+
+    /* The box may be back from an update with a new UI: look for it now,
+       not at the next launch. If there is one, the page reloads itself. */
+    if ("serviceWorker" in navigator) {
+      newUiComing = navigator.serviceWorker.getRegistration()
+        .then(r => r ? r.update().then(() => !!r.installing) : false)
+        .catch(() => false);
+    }
   };
 
   ws.onclose = () => {
@@ -422,7 +477,11 @@ function connect() {
 
   ws.onmessage = ev => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
-    if (m.t === "s") { state = m; render(); }
+    if (m.t === "s") {
+      state = m; render();
+      /* Report on an update from the page that will stay, not one about to reload. */
+      if (pending) newUiComing.then(coming => { if (!coming) checkUpdateResult(); });
+    }
     else if (m.t === "L") { showLog(m.m); }     /* history, sent when the panel opens */
     else if (m.t === "l") { appendLog(m.m); }   /* new lines since */
   };
@@ -507,6 +566,7 @@ function renderDiag() {
   el("dHw").textContent   = HW_TEXT[state.hw] || "\u2014";
   el("dTrack").textContent = pad2(state.trk) + " (copy order on the card)";
   el("dUi").textContent    = state.ui || "\u2014";
+  el("dFw").textContent    = state.fw ? state.fw + (state.rb ? " (last update rolled back)" : "") : "\u2014";
   const s = state.up || 0;
   el("dUp").textContent = Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
 }
@@ -610,20 +670,91 @@ el("btnNight").addEventListener("click", () => {
 });
 
 /* ---------- diagnostics: hold the title ---------- */
+function setDiag(open) {
+  if (open === diagOpen) return;
+  diagOpen = open;
+  el("diag").hidden = !open;
+  send(open ? "log_on" : "log_off");
+  if (open) renderDiag();
+}
+
 (function () {
   let timer = null;
   const brand = el("brand");
-  const open = () => {
-    diagOpen = !diagOpen;
-    el("diag").hidden = !diagOpen;
-    send(diagOpen ? "log_on" : "log_off");
-    if (diagOpen) renderDiag();
+  const toggle = () => {
+    setDiag(!diagOpen);
     if (navigator.vibrate) navigator.vibrate(18);
   };
-  brand.addEventListener("pointerdown", () => { timer = setTimeout(open, 900); });
+  brand.addEventListener("pointerdown", () => { timer = setTimeout(toggle, 900); });
   ["pointerup", "pointerleave", "pointercancel"].forEach(e =>
     brand.addEventListener(e, () => clearTimeout(timer)));
 })();
+
+/* ---------- firmware update (bottom of Diagnostics) ---------- */
+/* The .bin goes straight to the box, which writes it into its spare firmware
+   slot, checks it, and restarts into it. XMLHttpRequest rather than fetch(),
+   because only it reports upload progress. How it went is shown once the box
+   is back -- remembered in sessionStorage, since the page may reload itself
+   onto a new UI in between. */
+const PENDING = "wnm-update";
+let pending = null;   /* { fw, at }: the firmware before, and when the upload finished */
+try { pending = JSON.parse(sessionStorage.getItem(PENDING)); } catch {}
+try { el("upKey").value = localStorage.getItem("wnm-ota-key") || ""; } catch {}
+
+function upMsg(text) { el("upMsg").textContent = text; }
+function upBar(frac) {
+  el("upBar").hidden = frac === null;
+  el("upBar").firstElementChild.style.width = ((frac || 0) * 100) + "%";
+}
+
+el("upGo").addEventListener("click", () => {
+  const file = el("upFile").files[0];
+  const key  = el("upKey").value.trim();
+  if (!file) return upMsg("Choose the firmware.bin file first.");
+  if (!key)  return upMsg("Enter the update key.");
+
+  const go   = el("upGo");
+  const xhr  = new XMLHttpRequest();
+  const fail = text => { go.disabled = false; upBar(null); upMsg(text); };
+
+  xhr.upload.onprogress = e => {
+    if (!e.lengthComputable) return;
+    upBar(e.loaded / e.total);
+    upMsg(e.loaded < e.total ? "Sending\u2026 " + Math.floor(100 * e.loaded / e.total) + "%"
+                             : "Checking the image\u2026");
+  };
+  xhr.onload = () => {
+    if (xhr.status !== 200) return fail(xhr.responseText.trim() || "Update failed (" + xhr.status + ").");
+    pending = { fw: state.fw, at: Date.now() };
+    try { sessionStorage.setItem(PENDING, JSON.stringify(pending)); } catch {}
+    try { localStorage.setItem("wnm-ota-key", key); } catch {}
+    go.disabled = false;
+    upMsg("Installed. The box is restarting\u2026");
+  };
+  xhr.onerror = () => fail("Lost the connection to the box during the upload. Try again.");
+
+  go.disabled = true;
+  upBar(0);
+  upMsg("Sending\u2026");
+  xhr.open("POST", "/api/update");
+  xhr.setRequestHeader("X-OTA-Key", key);
+  xhr.send(file);
+});
+
+/* Once the box has restarted since the upload (its uptime is shorter than
+   the time since), say how the update went. */
+function checkUpdateResult() {
+  if (!pending || state.up * 1000 >= Date.now() - pending.at) return;   /* not restarted yet */
+  const before = pending.fw;
+  pending = null;
+  try { sessionStorage.removeItem(PENDING); } catch {}
+
+  upBar(null);
+  upMsg(state.fw !== before ? "Updated. Now running firmware " + state.fw + "."
+      : state.rb            ? "The new firmware failed its start-up checks, so the box went back to the old one."
+      :                       "The box restarted on the same firmware. Was it the same file?");
+  setDiag(true);
+}
 
 /* ---------- boot ---------- */
 let night = false;
@@ -639,12 +770,14 @@ connect();
    page reloads once to show the new version. ("updateViaCache: none" makes
    the browser check sw.js on every launch rather than once a day.) */
 if ("serviceWorker" in navigator) {
-  const hadWorker = !!navigator.serviceWorker.controller;   // false on the very first visit
-  let reloading = false;
+  /* The very first worker taking over isn't an update: nothing to reload. */
+  let controlled = !!navigator.serviceWorker.controller, reloading = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (!hadWorker || reloading) return;
-    reloading = true;
-    location.reload();
+    if (controlled && !reloading) {
+      reloading = true;
+      location.reload();
+    }
+    controlled = true;
   });
   navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
 }

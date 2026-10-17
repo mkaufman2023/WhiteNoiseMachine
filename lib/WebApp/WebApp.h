@@ -13,6 +13,9 @@
 *   built into the firmware (see board_build.embed_files), so the UI and  *
 *   the firmware can never be out of step.                                *
 *                                                                        *
+*   POST /api/update takes a new firmware.bin (from the app's            *
+*   Diagnostics panel, or `pio run -e ota -t upload`). See on_update().   *
+*                                                                        *
 *   THREADING: the server's handlers run on its own task, not on the      *
 *   Arduino loop() task. Touching Player from a handler would race        *
 *   against Player::tick(). So handlers only push Actions onto a FreeRTOS *
@@ -52,13 +55,17 @@ public:
         uint8_t arg  = 0;
     };
 
-    WebApp(Player& player, Net& net);
+    /** `update_key` must arrive with every firmware upload; an empty key turns updates off. */
+    WebApp(Player& player, Net& net, const char* update_key);
 
-    /** Starts the HTTPS server (UI, WebSocket, /api/state) and the port-80 redirect. */
+    /** Starts the HTTPS server (UI, WebSocket, /api/state, /api/update) and the port-80 redirect. */
     void begin();
 
-    /** Sends deferred state broadcasts and new log lines. Call every loop() iteration. */
+    /** Sends deferred state broadcasts and new log lines; restarts after an update. Call every loop() iteration. */
     void tick();
+
+    /** True once the HTTPS server is up. */
+    bool serving() const { return _https != nullptr; }
 
     /** Pops one queued Action. Returns false when the queue is empty. */
     bool next_action(Action& out);
@@ -72,9 +79,13 @@ private:
     static constexpr uint8_t  ACTION_QUEUE_LEN     = 16;
     static constexpr uint8_t  MAX_SOCKETS          = 6;    /**< Open HTTPS connections (each costs a TLS session) */
     static constexpr size_t   MAX_WS_MESSAGE       = 128;  /**< Commands are tiny; anything bigger is refused */
+    static constexpr size_t   MAX_KEY_LEN          = 64;   /**< Longest update key accepted */
+    static constexpr size_t   UPDATE_CHUNK         = 4096; /**< Upload read size: one flash sector */
+    static constexpr uint32_t RESTART_DELAY_MS     = 1000; /**< After an update: time for the reply to get out */
 
-    Player& _player;
-    Net&    _net;
+    Player&     _player;
+    Net&        _net;
+    const char* _update_key;
 
     httpd_handle_t _https    = nullptr;
     httpd_handle_t _redirect = nullptr;
@@ -90,6 +101,9 @@ private:
     char        _ui_build[9] = "";   /**< Fingerprint of the built-in web files, 8 hex digits */
     std::string _sw_js;              /**< sw.js with that fingerprint appended */
 
+    std::atomic<bool> _restart_due { false };   /**< A new firmware is installed; set by on_update() */
+    uint32_t          _t_restart = 0;           /**< When it was (written before _restart_due) */
+
     bool start_https();
     bool start_redirect();
     void broadcast_now();
@@ -104,6 +118,7 @@ private:
     static esp_err_t on_asset(httpd_req_t* req);
     static esp_err_t on_ws(httpd_req_t* req);
     static esp_err_t on_state(httpd_req_t* req);
+    static esp_err_t on_update(httpd_req_t* req);
     static esp_err_t on_redirect(httpd_req_t* req);
     static void      send_to_all(void* arg);
 };
