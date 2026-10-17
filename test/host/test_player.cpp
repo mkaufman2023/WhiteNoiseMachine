@@ -44,6 +44,17 @@ static int first_arg(const char* cmd) {
     for (auto& r:g_df->tx) if (r.cmd==cmd) return r.arg;
     return -1;
 }
+// Time of the n-th (0-based) `cmd` frame, or 0 if there aren't that many.
+static uint32_t t_of(const char* cmd, int n = 0) {
+    for (auto& r:g_df->tx) if (r.cmd==cmd && n-- == 0) return r.t;
+    return 0;
+}
+// Time from the first `cmd` frame to whatever frame went out next.
+static uint32_t gap_after(const char* cmd) {
+    for (size_t i=0; i+1<g_df->tx.size(); i++)
+        if (g_df->tx[i].cmd==cmd) return g_df->tx[i+1].t - g_df->tx[i].t;
+    return 0;
+}
 // True if the last volume sent before the first `cmd` frame was 0 -- i.e. the
 // module was silent at the moment that command started the sound.
 static bool silent_before(const char* cmd) {
@@ -63,10 +74,12 @@ int main() {
     p1.begin();
     run(200);
     check("nothing transmitted during warmup", df1.tx.size()==1); // begin() only
+    check("status says warming up", p1.state().hw == Player::Hw::WARMING);
     run(2600);
-    check("hardware marked ready after warmup", p1.state().hw_ready);
-    check("source set to SD card", count("set_source")==1);
-    check("module power-on volume capped", count("power_on_vol")==1);
+    check("status ok once the module replied", p1.state().hw == Player::Hw::OK);
+    check("no set-source frame (SD is the only source)", count("set_source")==0);
+    check("no power-on-volume frame", count("power_on_vol")==0);
+    check("module set to volume 0", first_arg("set_volume")==0);
     check("silent boot: not playing", !p1.state().playing);
     check("no track started", count("loop_track")==0);
     dump("boot");
@@ -160,7 +173,7 @@ int main() {
     check("volume setpoint restored", p2.state().volume==25);
     check("favorites restored", p2.state().favorites==(1u<<7));
     check("comes up silent", p2.state().volume_now==0);
-    run(2700);   // warm-up, then four boot frames 35 ms apart
+    run(2700);   // warm-up, then the boot frames
     check("auto-resumed the saved sound", count("loop_track")==1 && p2.state().playing);
     check("silenced before the sound starts", silent_before("loop_track"));
     check("still ramping, not instantly loud", p2.state().volume_now < 25);
@@ -237,6 +250,90 @@ int main() {
     check("not instantly at the new level", p3.state().volume_now < 20);
     run(1500);
     check("faded up to the new level", p3.state().volume_now==20);
+
+    /* ---------------- 15. Dropped command ---------------- */
+    printf("\n15. A command the module never answers is resent\n");
+    df3.tx.clear();
+    df3.drop("loop_track");
+    p3.select_track(9);
+    run(3000);
+    check("track command sent twice (lost once, resent)", count("loop_track")==2);
+    check("resend waited for the reply timeout", t_of("loop_track", 1) - t_of("loop_track", 0) >= 200);
+    check("then carried on: switched and faded back up", p3.state().track==9 && p3.state().volume_now==20);
+    check("status still ok", p3.state().hw == Player::Hw::OK);
+
+    /* ---------------- 16. Rejected command ---------------- */
+    printf("\n16. A command the module rejects is resent right away\n");
+    df3.tx.clear();
+    df3.reject("loop_track");
+    p3.select_track(3);
+    run(3000);
+    check("track command sent twice", count("loop_track")==2);
+    check("without waiting out the timeout", t_of("loop_track", 1) - t_of("loop_track", 0) < 200);
+    check("switched and faded back up", p3.state().track==3 && p3.state().volume_now==20);
+
+    /* ---------------- 17. Track ended on its own ---------------- */
+    printf("\n17. If the module says the track ended, the loop is restarted\n");
+    df3.tx.clear();
+    df3.say(dfplayer::cmd::QU_TF_SD_COMPL);
+    run(200);
+    check("restarted the track", count("loop_track")==1 && first_arg("loop_track")==3);
+    df3.say(dfplayer::cmd::QU_TF_SD_COMPL);
+    run(200);
+    check("but not again within a second", count("loop_track")==1);
+
+    /* ---------------- 18. Module restarted on its own ---------------- */
+    printf("\n18. If the module restarts by itself, the sound comes back from silence\n");
+    run(1000);
+    df3.tx.clear();
+    df3.say(dfplayer::cmd::SEND_INIT_PARAMS);
+    run(200);
+    check("sound restarted", count("loop_track")==1);
+    check("silenced first (the module forgot its volume)", silent_before("loop_track"));
+    run(1500);
+    check("faded back up", p3.state().volume_now==20);
+
+    /* ---------------- 19. Module stops answering ---------------- */
+    printf("\n19. Module stops answering, then comes back\n");
+    df3.tx.clear();
+    df3.acks = false;
+    p3.set_volume(15); run(700);   // 3 tries x 200 ms, then give up
+    check("one give-up isn't a fault yet", p3.state().hw == Player::Hw::OK);
+    p3.set_volume(16); run(700);
+    check("two in a row is", p3.state().hw == Player::Hw::FAULT);
+    check("each was tried 3 times", count("set_volume")==6);
+    df3.acks = true;
+    p3.set_volume(17); run(300);
+    check("ok again once it replies", p3.state().hw == Player::Hw::OK);
+    check("and the new level got through", p3.state().volume_now==17);
+
+    /* ---------------- 20. Module that never replies ---------------- */
+    printf("\n20. A module that never replies gets fixed timings instead\n");
+    g_nvs.u.clear();
+    DFPlayerMini df4; df4.acks = false; Player p4(df4);
+    g_df=&df4; g_pl=&p4;
+    p4.begin();
+    run(2700);
+    check("status says no replies", p4.state().hw == Player::Hw::NO_REPLIES);
+    df4.tx.clear();
+    p4.select_track(2);
+    run(2000);
+    check("still started the track and faded up", count("loop_track")==1 && p4.state().volume_now==p4.state().volume);
+    check("nothing resent", count("loop_track")==1 && count("set_volume") <= p4.state().volume + 1);
+    check("waited >=250 ms after starting the track", gap_after("loop_track") >= 250);
+    check("frames always >=50 ms apart", min_gap() >= 50);
+
+    /* ---------------- 21. Module's own boot message ---------------- */
+    printf("\n21. The module's \"I'm up\" during warm-up doesn't double-start the sound\n");
+    g_nvs.u.clear();
+    g_nvs.u["track"] = 5; g_nvs.u["volume"] = 10; g_nvs.u["playing"] = 1;
+    DFPlayerMini df5; Player p5(df5);
+    g_df=&df5; g_pl=&p5;
+    p5.begin();
+    df5.say(dfplayer::cmd::SEND_INIT_PARAMS, 1500);
+    run(3000);
+    check("restored sound started once", count("loop_track")==1);
+    check("status ok", p5.state().hw == Player::Hw::OK);
 
     printf("\n%s  (%d failures)\n", fails ? "TESTS FAILED" : "ALL TESTS PASSED", fails);
     return fails ? 1 : 0;

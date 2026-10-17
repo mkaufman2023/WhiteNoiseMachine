@@ -21,7 +21,7 @@ void Player::begin()
 
     _df.begin();
     _t_begin   = millis();
-    _t_last_tx = _t_begin;
+    _t_next_tx = _t_begin;
     _warm      = false;
 }
 
@@ -33,16 +33,18 @@ void Player::tick()
     /* ---- 1) Wait out the module's power-on settling time, then run the
      *          boot sequence. Nothing is transmitted before this. ---- */
     if (!_warm) {
+        // Whatever the module says while it boots (e.g. its 0x3F "I'm up")
+        // only proves it's alive -- don't act on it.
+        dfplayer::Frame f;
+        while (_df.poll(f)) _heard = true;
+
         if (now - _t_begin < WARMUP_MS) return;
 
-        _warm        = true;
-        _s.hw_ready  = true;
+        _warm = true;
+        update_hw();
 
-        queue_push(Cmd::SET_SOURCE, 2);        // 2 = SD card
-
-        // Cap the module's own power-on volume as a safety net, so that even a
-        // firmware crash or a bare power cycle can never blast at 30.
-        queue_push(Cmd::POWER_ON_VOL, 8);
+        // No set-source or power-on-volume commands: the SD card is the only
+        // source, and the volume is always set to 0 before anything plays.
 
         // Come up silent. If the box was playing when it lost power, start that
         // sound again and fade up to the saved level -- a power blip at 2 a.m.
@@ -73,20 +75,12 @@ void Player::tick()
         advance_sequence();
     }
 
-    /* ---- 4) Transmit at most one UART frame per MIN_TX_GAP_MS. This replaces
-     *          the old delay(500) and is the reason the UI now feels instant. ---- */
-    if ((now - _t_last_tx) >= MIN_TX_GAP_MS) {
-        QCmd c;
-        if (queue_pop(c)) {
-            transmit(c);
-            _t_last_tx = now;
-        }
-        else if (_vol_write_due) {
-            _df.set_volume(_s.volume_now);
-            _vol_write_due = false;
-            _t_last_tx     = now;
-        }
-    }
+    /* ---- 4) Hear out the module, then send the next frame when it's ready
+     *          for one. Never blocks. ---- */
+    dfplayer::Frame f;
+    while (_df.poll(f)) handle_reply(f, now);
+
+    dispatch(now);
 
     /* ---- 5) Persist state, debounced, so we aren't hammering flash on every
      *          slider movement. ---- */
@@ -137,7 +131,8 @@ void Player::set_volume(uint8_t volume)
     if (_seq == Seq::IDLE) {
         // Direct user adjustment: jump straight there. Dragging a slider should
         // feel immediate, and consecutive writes coalesce in the dispatcher so
-        // a fast drag becomes one write per MIN_TX_GAP_MS, latest value wins.
+        // a fast drag becomes one write per round trip to the module, latest
+        // value wins.
         _s.volume_now  = volume;
         _vol_target    = volume;
         _vol_write_due = true;
@@ -283,16 +278,150 @@ void Player::advance_sequence()
 }
 
 
+/* =======================================================================
+ *  Talking to the module
+ * ======================================================================= */
+
+void Player::handle_reply(const dfplayer::Frame& f, uint32_t now)
+{
+    using namespace dfplayer::cmd;
+
+    _heard = true;
+    _fault = false;
+
+    switch (f.cmd) {
+        case RESPONSE:              // 0x41 -- "got it"
+            _acked    = true;
+            _give_ups = 0;
+
+            if (_awaiting_ack) {
+                _awaiting_ack = false;
+
+                // Starting a track keeps the module busy reading the SD card
+                // for a moment; give it longer before the next frame.
+                const bool track_start = (_cur.cmd == Cmd::LOOP_TRACK || _cur.cmd == Cmd::PLAY);
+                _t_next_tx = now + (track_start ? TRACK_SETTLE_MS : ACK_GAP_MS);
+            }
+            break;
+
+        case ERROR_RESEND:          // 0x40 -- the module rejected the frame
+            if (_awaiting_ack) _t_sent = now - ACK_TIMEOUT_MS;   // resend now, don't wait out the timeout
+            break;
+
+        case QU_TF_SD_COMPL:        // 0x3D -- the track finished
+            // In loop mode this shouldn't happen. If it does the sound has
+            // stopped, so start it again: white noise mustn't quietly end at 3 a.m.
+            if (_s.playing && _seq == Seq::IDLE && (now - _t_last_heal) >= HEAL_DEBOUNCE_MS) {
+                queue_push(Cmd::LOOP_TRACK, _s.track);
+                _t_last_heal = now;
+            }
+            break;
+
+        case SEND_INIT_PARAMS:      // 0x3F -- the module (re)started and forgot everything
+            if (_s.playing) start_playback(Cmd::LOOP_TRACK, _s.track);
+            break;
+
+        default:
+            break;
+    }
+
+    update_hw();
+}
+
+
+/**
+ * Sends the next frame once the module is ready for it: one command at a
+ * time, each waiting for the module's reply (or, for a module that never
+ * replies, a fixed gap). Commands that get no reply are resent.
+ */
+void Player::dispatch(uint32_t now)
+{
+    if (_awaiting_ack) {
+        if (now - _t_sent < ACK_TIMEOUT_MS) return;     // still waiting for "got it"
+
+        _awaiting_ack = false;
+
+        // A fade step that a newer level has already overtaken isn't worth resending.
+        const bool superseded = _cur_is_fade_step && _vol_write_due;
+
+        if (!superseded) {
+            if (_cur_tries < MAX_TRIES) {
+                send(now);                              // lost or rejected: resend it
+                return;
+            }
+            give_up();
+        }
+    }
+
+    if ((int32_t)(now - _t_next_tx) < 0) return;      // still in the gap after the last frame
+
+    if (queue_pop(_cur)) {
+        _cur_is_fade_step = false;
+    }
+    else if (_vol_write_due) {
+        _cur              = { Cmd::SET_VOL, _s.volume_now };
+        _cur_is_fade_step = true;
+        _vol_write_due    = false;
+    }
+    else {
+        return;
+    }
+
+    _cur_tries = 0;
+    send(now);
+}
+
+
+void Player::send(uint32_t now)
+{
+    transmit(_cur);
+    _cur_tries++;
+    _t_sent = now;
+
+    if (_acked) {
+        _awaiting_ack = true;                           // next frame waits for "got it"
+    }
+    else {
+        // This module hasn't replied (yet): leave a gap that's safe without one.
+        _t_next_tx = now + (_cur.cmd == Cmd::SET_VOL ? TIMED_VOL_GAP_MS : TIMED_GAP_MS);
+    }
+}
+
+
+void Player::give_up()
+{
+    if (++_give_ups < FAULT_AFTER) return;
+
+    // The module has stopped answering. Report it, and fall back to fixed
+    // timings so commands keep flowing; its next reply undoes both.
+    _fault = true;
+    _acked = false;
+    update_hw();
+}
+
+
+void Player::update_hw()
+{
+    const Hw hw = !_warm ? Hw::WARMING
+                : _fault ? Hw::FAULT
+                : _heard ? Hw::OK
+                :          Hw::NO_REPLIES;
+
+    if (hw != _s.hw) {
+        _s.hw = hw;
+        mark_dirty();
+    }
+}
+
+
 void Player::transmit(const QCmd& c)
 {
     switch (c.cmd) {
-        case Cmd::SET_SOURCE:    _df.set_source(c.arg);           break;
         case Cmd::SET_VOL:       _df.set_volume(c.arg);           break;
         case Cmd::LOOP_TRACK:    _df.loop_track(c.arg);           break;
         case Cmd::PLAY:          _df.play();                      break;
         case Cmd::PAUSE:         _df.pause();                     break;
         case Cmd::STOP:          _df.stop_all_playback();         break;
-        case Cmd::POWER_ON_VOL:  _df.set_power_on_volume(c.arg);  break;
         case Cmd::NONE:
         default:                                                  break;
     }

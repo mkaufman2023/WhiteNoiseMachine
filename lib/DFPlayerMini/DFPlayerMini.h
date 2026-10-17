@@ -16,6 +16,8 @@
 #define DF_PLAYER_MINI_H
 
 #include <Arduino.h>
+#include "Commands.h"
+#include "FrameParser.h"
 
 
 class DFPlayerMini {
@@ -23,6 +25,14 @@ public:
     DFPlayerMini(int mcu_rx = D7, int mcu_tx = D6);
 
     void begin(bool debug = false);
+
+    /**
+     * Reads whatever the module has sent, without blocking. Returns true, and
+     * fills `out`, each time a complete frame arrives -- call it in a loop.
+     * Every command asks the module for a reply, so a cmd::RESPONSE (0x41)
+     * frame means "got it".
+     */
+    bool poll(dfplayer::Frame& out);
 
     void play_next();
     void play_previous();
@@ -35,9 +45,6 @@ public:
 
     void loop_track(int track);
     void loop_track(byte track);
-
-    void loop_track_in_folder(int folder, int track);
-    void loop_track_in_folder(byte folder, byte track);
 
     // void play_folder(int folder);   // void playF(byte f);
     // void play_folder(byte folder);  // void playF(byte f);
@@ -80,26 +87,15 @@ public:
     void sleep();
     void wakeup();
 
-    uint16_t get_status();
-    uint16_t get_volume();
-    uint16_t get_folder_count();
-    uint16_t get_folder_track_count();
-    uint16_t get_total_track_count();
-    // uint16_t get_currently_playing_track(); // uint16_t qPlaying();
-
 private:
     int _mcu_rx;    // MCU RX pin
     int _mcu_tx;    // MCU TX pin
 
-    Stream* _serial = nullptr;      // Serial stream
-    byte    _ansbuf[15] = {0};      // Response buffer
-    bool    _show_debug_messages;   // Show debug flag
+    Stream*               _serial = nullptr;              // Serial stream
+    dfplayer::FrameParser _parser;                        // Reassembles replies from the module
+    bool                  _show_debug_messages = false;   // Show debug flag
 
-    String _sanswer();
     String _sbyte2hex(byte b);
-    // int    _shex2int(char *s, int n);
-
-    uint16_t _read_response();
 
     void _send_command(byte command);
     void _send_command(byte command, byte data2);

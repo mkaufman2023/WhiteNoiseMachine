@@ -12,3 +12,4 @@ include/config/wifi.h
 
 # Host test build output
 test/host/test_player
+test/host/test_frames
