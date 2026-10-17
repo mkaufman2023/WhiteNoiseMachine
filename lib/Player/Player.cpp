@@ -44,18 +44,14 @@ void Player::tick()
         // firmware crash or a bare power cycle can never blast at 30.
         queue_push(Cmd::POWER_ON_VOL, 8);
 
-        // Come up silent, then fade to the saved level. A power blip at 2 a.m.
+        // Come up silent. If the box was playing when it lost power, start that
+        // sound again and fade up to the saved level -- a power blip at 2 a.m.
         // must not restart the sound at full volume.
         _s.volume_now  = 0;
         _vol_target    = 0;
         _vol_write_due = true;
 
-        if (_s.playing) {
-            _pending_track = _s.track;
-            queue_push(Cmd::LOOP_TRACK, _s.track);
-            _seq = Seq::IN;
-            begin_fade(_s.volume);
-        }
+        if (_s.playing) start_playback(Cmd::LOOP_TRACK, _s.track);
 
         mark_dirty();
         return;
@@ -109,21 +105,23 @@ void Player::select_track(uint8_t track)
 {
     if (track < 1 || track > TRACK_COUNT) return;
 
-    _pending_track = track;
+    // The module is audible unless it's at volume 0 or has finished fading
+    // out to a pause or stop.
+    const bool audible = (_s.volume_now > 0) && (_s.playing || _seq != Seq::IDLE);
 
-    // If we're already silent there's nothing to fade out of -- switch now.
-    if (!_s.playing || _s.volume_now == 0) {
-        _s.track   = track;
-        _s.playing = true;
-        queue_push(Cmd::LOOP_TRACK, track);
-        _seq = Seq::IN;
-        begin_fade(_s.volume);
-    }
-    else {
+    _pending_track = track;
+    _s.playing     = true;
+
+    if (audible) {
         // Fade out first so the transition isn't an abrupt cut. A second tap
         // during the fade just retargets _pending_track -- no queue buildup.
         _seq = Seq::OUT_TO_SWITCH;
         begin_fade(0);
+    }
+    else {
+        // Nothing to fade out of -- switch now.
+        _s.track = track;
+        start_playback(Cmd::LOOP_TRACK, track);
     }
 
     mark_dirty();
@@ -158,7 +156,9 @@ void Player::set_volume(uint8_t volume)
 void Player::pause()
 {
     if (!_s.playing) return;
-    _seq = Seq::OUT_TO_PAUSE;
+
+    _s.playing = false;
+    _seq       = Seq::OUT_TO_PAUSE;
     begin_fade(0);
     mark_dirty();
 }
@@ -168,10 +168,20 @@ void Player::resume()
 {
     if (_s.playing) return;
 
-    _s.playing = true;
-    queue_push(Cmd::PLAY);
-    _seq = Seq::IN;
-    begin_fade(_s.volume);
+    if (_seq == Seq::OUT_TO_PAUSE || _seq == Seq::OUT_TO_STOP) {
+        // Still fading out, so nothing has been sent to the module yet and it
+        // is still playing. Just turn the fade around.
+        _s.playing = true;
+        _seq       = Seq::IN;
+        begin_fade(_s.volume);
+    }
+    else {
+        // Only a paused module can simply be unpaused. After a fresh boot
+        // there's no track loaded, and after a Stop the module may restart on
+        // a different file outside loop mode -- so start the selected track.
+        start_playback(_paused ? Cmd::PLAY : Cmd::LOOP_TRACK, _s.track);
+    }
+
     mark_dirty();
 }
 
@@ -184,8 +194,11 @@ void Player::toggle()
 
 void Player::stop()
 {
-    if (!_s.playing) return;
-    _seq = Seq::OUT_TO_STOP;
+    // Already paused or stopped: nothing to fade out of.
+    if (!_s.playing && _seq == Seq::IDLE) return;
+
+    _s.playing = false;
+    _seq       = Seq::OUT_TO_STOP;
     begin_fade(0);
     mark_dirty();
 }
@@ -219,27 +232,44 @@ void Player::begin_fade(uint8_t target)
 }
 
 
+/**
+ * Starts sound from silence. An explicit volume-0 frame is queued ahead of
+ * the play command, so the module is silent when audio begins -- even if the
+ * slider moved while it was paused, or it powered on at its own stored volume
+ * -- and then the volume fades up to the setpoint.
+ */
+void Player::start_playback(Cmd cmd, uint8_t arg)
+{
+    _s.volume_now  = 0;
+    _vol_write_due = false;          // the queued SET_VOL covers it
+    queue_push(Cmd::SET_VOL, 0);
+    queue_push(cmd, arg);
+
+    _paused    = false;
+    _s.playing = true;
+    _seq       = Seq::IN;
+    begin_fade(_s.volume);
+}
+
+
 void Player::advance_sequence()
 {
     switch (_seq) {
         case Seq::OUT_TO_SWITCH:
-            _s.track   = _pending_track;
-            _s.playing = true;
-            queue_push(Cmd::LOOP_TRACK, _pending_track);
-            _seq = Seq::IN;
-            begin_fade(_s.volume);
+            _s.track = _pending_track;
+            start_playback(Cmd::LOOP_TRACK, _pending_track);
             break;
 
         case Seq::OUT_TO_PAUSE:
             queue_push(Cmd::PAUSE);
-            _s.playing = false;
-            _seq       = Seq::IDLE;
+            _paused = true;
+            _seq    = Seq::IDLE;
             break;
 
         case Seq::OUT_TO_STOP:
             queue_push(Cmd::STOP);
-            _s.playing = false;
-            _seq       = Seq::IDLE;
+            _paused = false;
+            _seq    = Seq::IDLE;
             break;
 
         case Seq::IN:
@@ -257,6 +287,7 @@ void Player::transmit(const QCmd& c)
 {
     switch (c.cmd) {
         case Cmd::SET_SOURCE:    _df.set_source(c.arg);           break;
+        case Cmd::SET_VOL:       _df.set_volume(c.arg);           break;
         case Cmd::LOOP_TRACK:    _df.loop_track(c.arg);           break;
         case Cmd::PLAY:          _df.play();                      break;
         case Cmd::PAUSE:         _df.pause();                     break;

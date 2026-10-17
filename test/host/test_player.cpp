@@ -39,6 +39,21 @@ static uint32_t min_gap() {
     }
     return g_df->tx.size()<2 ? 0 : m;
 }
+// Argument of the first `cmd` frame, or -1 if none was sent.
+static int first_arg(const char* cmd) {
+    for (auto& r:g_df->tx) if (r.cmd==cmd) return r.arg;
+    return -1;
+}
+// True if the last volume sent before the first `cmd` frame was 0 -- i.e. the
+// module was silent at the moment that command started the sound.
+static bool silent_before(const char* cmd) {
+    int vol = -1;
+    for (auto& r:g_df->tx) {
+        if (r.cmd=="set_volume") vol = r.arg;
+        if (r.cmd==cmd) return vol==0;
+    }
+    return false;
+}
 
 int main() {
     /* ---------------- 1. Cold boot, nothing saved ---------------- */
@@ -64,6 +79,7 @@ int main() {
     check("loop_track sent promptly", count("loop_track")==1);
     check("track recorded in state", p1.state().track==3);
     check("volume starts at 0, not the setpoint", p1.state().volume_now < p1.state().volume);
+    check("module silenced before the track starts", silent_before("loop_track"));
     run(1500);
     check("fade reached setpoint", p1.state().volume_now == p1.state().volume);
     check("fade flag cleared", !p1.state().fading);
@@ -93,9 +109,7 @@ int main() {
     check("track switched", p1.state().track==8);
     check("loop_track sent once", count("loop_track")==1);
     check("returned to setpoint", p1.state().volume_now==25);
-    // ordering: the switch must land while volume is at 0
-    { bool ok=false; for (auto&r:g_df->tx) if(r.cmd=="loop_track") ok=true;
-      check("switch occurred inside the fade window", ok); }
+    check("switch landed while the module was at volume 0", silent_before("loop_track"));
 
     /* ---------------- 5. Rapid taps coalesce ---------------- */
     printf("\n5. Tap four sounds quickly\n");
@@ -123,6 +137,8 @@ int main() {
     p1.resume();
     run(2500);
     check("resume sent", count("play")==1);
+    check("unpaused rather than restarting the track", count("loop_track")==0);
+    check("silenced before unpausing", silent_before("play"));
     check("faded back to setpoint", p1.state().volume_now==25);
     check("state shows playing", p1.state().playing);
 
@@ -144,8 +160,9 @@ int main() {
     check("volume setpoint restored", p2.state().volume==25);
     check("favorites restored", p2.state().favorites==(1u<<7));
     check("comes up silent", p2.state().volume_now==0);
-    run(2600);
+    run(2700);   // warm-up, then four boot frames 35 ms apart
     check("auto-resumed the saved sound", count("loop_track")==1 && p2.state().playing);
+    check("silenced before the sound starts", silent_before("loop_track"));
     check("still ramping, not instantly loud", p2.state().volume_now < 25);
     run(2000);
     check("reached saved level", p2.state().volume_now==25);
@@ -156,6 +173,70 @@ int main() {
     p2.select_track(0);   check("track 0 rejected", p2.state().track==before);
     p2.select_track(99);  check("track 99 rejected", p2.state().track==before);
     p2.set_volume(200);   check("volume clamped to 30", p2.state().volume==30);
+
+    /* ---------------- 10. Play after a fresh boot ---------------- */
+    printf("\n10. Play after a fresh boot starts the saved sound, looping\n");
+    g_nvs.u.clear();
+    g_nvs.u["track"] = 6; g_nvs.u["volume"] = 10; g_nvs.u["playing"] = 0;
+    DFPlayerMini df3; Player p3(df3);
+    g_df=&df3; g_pl=&p3;
+    p3.begin();
+    run(2700);
+    check("boots silent", !p3.state().playing && count("loop_track")==0);
+    df3.tx.clear();
+    p3.resume();
+    run(100);
+    check("started the track rather than unpausing", count("loop_track")==1 && count("play")==0);
+    check("started the saved track (6)", first_arg("loop_track")==6);
+    check("silenced before starting", silent_before("loop_track"));
+    run(1000);
+    check("faded up to the saved level", p3.state().volume_now==10 && p3.state().playing);
+
+    /* ---------------- 11. Play after Stop ---------------- */
+    printf("\n11. Play after Stop restarts the sound, looping\n");
+    df3.tx.clear();
+    p3.stop();
+    check("state shows stopped immediately", !p3.state().playing);
+    run(1000);
+    check("stop sent after fade", count("stop")==1);
+    df3.tx.clear();
+    p3.resume();
+    run(100);
+    check("restarted the track rather than unpausing", count("loop_track")==1 && count("play")==0);
+    run(1000);
+    check("back at the saved level", p3.state().volume_now==10);
+
+    /* ---------------- 12. Play during a fade-out ---------------- */
+    printf("\n12. Play during a fade-out to pause turns the fade around\n");
+    df3.tx.clear();
+    p3.pause();
+    run(150);
+    check("mid fade-out", p3.state().volume_now > 0 && p3.state().volume_now < 10);
+    p3.resume();
+    run(1000);
+    check("pause never sent", count("pause")==0);
+    check("no restart or unpause needed", count("loop_track")==0 && count("play")==0);
+    check("back up at the setpoint", p3.state().volume_now==10 && p3.state().playing);
+
+    /* ---------------- 13. Double-tap Play/Pause ---------------- */
+    printf("\n13. Double-tapping Play/Pause ends up playing\n");
+    df3.tx.clear();
+    p3.toggle(); run(100);
+    p3.toggle(); run(1000);
+    check("still playing", p3.state().playing && count("pause")==0);
+    check("at the setpoint", p3.state().volume_now==10);
+
+    /* ---------------- 14. Slider moved while paused ---------------- */
+    printf("\n14. Volume changed while paused still fades in from silence\n");
+    p3.pause(); run(1000);
+    p3.set_volume(20); run(100);
+    df3.tx.clear();
+    p3.resume();
+    run(40);
+    check("silenced before unpausing", silent_before("play"));
+    check("not instantly at the new level", p3.state().volume_now < 20);
+    run(1500);
+    check("faded up to the new level", p3.state().volume_now==20);
 
     printf("\n%s  (%d failures)\n", fails ? "TESTS FAILED" : "ALL TESTS PASSED", fails);
     return fails ? 1 : 0;
