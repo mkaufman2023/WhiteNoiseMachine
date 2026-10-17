@@ -21,6 +21,7 @@
 #include <config/secrets.h>
 #include <DFPlayerMini.h>
 #include <Logbook.h>
+#include <Ota.h>
 #include <Player.h>
 #include <Net.h>
 #include <WebApp.h>
@@ -38,7 +39,7 @@ static constexpr char HOSTNAME[] = "whitenoise";
 DFPlayerMini df_player(MCU_RX, MCU_TX);
 Player       player(df_player);
 Net          wifi_net(secrets::wifi_ssid, secrets::wifi_password, HOSTNAME);
-WebApp       web_app(player, wifi_net);
+WebApp       web_app(player, wifi_net, secrets::ota_key);
 
 
 /** Why the box last restarted, in words -- a crash or brownout overnight shows up here. */
@@ -79,7 +80,8 @@ static void apply(const WebApp::Action& a)
 void setup()
 {
     Serial.begin(115200);
-    logbook::add("Boot: firmware built " __DATE__ " " __TIME__ ", last reset: %s", reset_reason());
+    logbook::add("Boot: last reset: %s", reset_reason());
+    ota::begin();       // logs the firmware ID, and whether it's on probation
 
     player.begin();     // starts UART, restores saved track/volume/favorites
     wifi_net.begin();   // starts connecting; does not wait for it
@@ -94,6 +96,9 @@ void loop()
     wifi_net.tick();
     player.tick();
     web_app.tick();
+
+    // A new firmware is kept once it could take the next update.
+    ota::tick(wifi_net.connected() && web_app.serving());
 
     // Apply everything the phones asked for since the last pass. Doing this
     // here (rather than in the WebSocket callback) keeps all state mutation on
