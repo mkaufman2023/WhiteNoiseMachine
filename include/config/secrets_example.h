@@ -1,22 +1,21 @@
 /******************************************************************
 *                                                                 *
-*    include / config / webserver.h                               *
+*    include / config / secrets_example.h                         *
 *    Created by Matt Kaufman, December 4, 2025.                   *
 *                                                                 *
-*    Configuration file for Web Server settings and constants.    *
+*    Credentials for the home Wi-Fi network.                      *
 *                                                                 *
 *******************************************************************/
 
-#ifndef WEB_SERVER_CONFIG_H
-#define WEB_SERVER_CONFIG_H
+#ifndef SECRETS_CONFIG_H
+#define SECRETS_CONFIG_H
 
-
-namespace webserver
+// Copy this file to secrets.h (gitignored) and fill it in.
+namespace secrets
 {
-    constexpr int port = 80;
-    const char* hostname = "whitenoise";
-    const char* hostname_full = "http://whitenoise.local";
+    constexpr const char* wifi_ssid     = "";
+    constexpr const char* wifi_password = "";
 }
 
 
-#endif  // WEB_SERVER_CONFIG_H
+#endif  // SECRETS_CONFIG_H

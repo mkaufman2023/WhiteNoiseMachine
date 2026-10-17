@@ -6,6 +6,6 @@
 mp3_names.txt
 
 # Credentials -- never commit these.
+include/config/secrets.h
 include/config/wifi.h
-lib/HomeWiFi/wificonfig.h
 **/wificonfig.h
