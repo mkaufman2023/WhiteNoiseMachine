@@ -16,7 +16,6 @@
 **************************************************************************/
 
 #include <Arduino.h>
-#include <LittleFS.h>
 
 #include <config/secrets.h>
 #include <DFPlayerMini.h>
@@ -63,10 +62,6 @@ void setup()
     Serial.begin(115200);
     Serial.println("\n--- White Noise Machine booting ---");
 
-    if (!LittleFS.begin(true)) {
-        Serial.println("LittleFS mount failed -- the UI will not be served.");
-    }
-
     player.begin();     // starts UART, restores saved track/volume/favorites
     wifi_net.begin();   // starts connecting; does not wait for it
     web_app.begin();    // server is up immediately, even before Wi-Fi lands
@@ -94,5 +89,5 @@ void loop()
         web_app.request_broadcast();
     }
 
-    delay(1);   // yield to the async TCP task and the idle/watchdog task
+    delay(1);   // yield to the web server task and the idle/watchdog task
 }

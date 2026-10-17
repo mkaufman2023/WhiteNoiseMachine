@@ -396,7 +396,7 @@ const HW_TEXT = ["warming up", "ready", "no replies (fixed timing)", "not respon
 
 /* ---------- transport ---------- */
 function connect() {
-  ws = new WebSocket("ws://" + location.host + "/ws");
+  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
 
   ws.onopen = () => {
     backoff = 500;
@@ -482,7 +482,7 @@ function renderDiag() {
   el("dIp").textContent   = state.ip || "\u2014";
   el("dRssi").textContent = state.rssi ? state.rssi + " dBm" : "\u2014";
   el("dMdns").textContent = state.mdns ? "whitenoise.local" : "down";
-  el("dHw").textContent   = HW_TEXT[state.hw] || "—";
+  el("dHw").textContent   = HW_TEXT[state.hw] || "\u2014";
   el("dFile").textContent = "/mp3/" + pad4(state.trk) + ".mp3";
   const s = state.up || 0;
   el("dUp").textContent = Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
