@@ -59,8 +59,12 @@ void DFPlayerMini::begin(bool debug)
 
     // Initialize serial connection
     Serial1.begin(9600, SERIAL_8N1, _mcu_rx, _mcu_tx);
-    delay(2500);
     _serial = &Serial1;
+
+    // NOTE: The former delay(2500) here (the module's power-on settling time)
+    // is now handled non-blockingly by Player::tick(), which refuses to
+    // transmit until WARMUP_MS has elapsed since begin(). The device now boots
+    // straight into its main loop and serves the UI while the module settles.
     
     if (_show_debug_messages) {
         Serial.println("DFPlayerMini: Serial connection initialized.");
@@ -643,7 +647,11 @@ void DFPlayerMini::_send_command(byte command, byte data1, byte data2)
     // Command Structure HEAD ADDR LEN  CMD ACK DATA CKL CKH END
     // Command Structure 0x7E 0xFF 0x06 CMD ACK DATA CK1 CK2 0xEF
 
-    delay(20);
+    // NOTE: This function is now NON-BLOCKING. The former delay(20) here and
+    // delay(500) at the end cost ~520 ms per command and were executed inside
+    // the HTTP request path, freezing the whole device on every button press.
+    // Inter-command spacing is now enforced by Player::tick() (MIN_TX_GAP_MS),
+    // which never blocks. Do not call this directly -- go through Player.
 
     send_buf[0] = 0x7E;     // HEAD byte constant
     send_buf[1] = 0xFF;     // ADDR byte constant
@@ -664,8 +672,6 @@ void DFPlayerMini::_send_command(byte command, byte data1, byte data2)
         Serial.print("Sending: ");
         Serial.println(send_str);     // Display hex bytes sent to DFPlayer
     }
-
-    delay(500);
 }
 
 

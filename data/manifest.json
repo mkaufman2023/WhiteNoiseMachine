@@ -1,11 +1,31 @@
 {
-    "name": "White Noise Machine",
-    "short_name": "White Noise",
+    "name": "Acoustic Wellness Unit",
+    "short_name": "Wellness",
+    "description": "Sound and volume control for the white noise machine.",
     "start_url": "/",
+    "scope": "/",
     "display": "standalone",
-    "background_color": "#111827",
-    "theme_color": "#111827",
+    "orientation": "portrait",
+    "background_color": "#0B1418",
+    "theme_color": "#0B1418",
     "icons": [
+        {
+            "src": "/icon-180.png",
+            "sizes": "180x180",
+            "type": "image/png"
+        },
+        {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
         {
             "src": "/icon.svg",
             "sizes": "any",

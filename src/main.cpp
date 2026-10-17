@@ -1,167 +1,104 @@
-#include <WiFi.h>
-#include <SPIFFS.h>
-#include <ESPmDNS.h>
-#include <WebServer.h>
+/*************************************************************************
+*                                                                        *
+*   main.cpp - White Noise Machine                                       *
+*                                                                        *
+*   Nothing in setup() or loop() blocks. The box boots straight into its  *
+*   main loop and serves the UI while the audio module settles and Wi-Fi  *
+*   negotiates, so the app is never left hanging on a request.            *
+*                                                                        *
+*   Data flow:                                                            *
+*       phone --WS--> WebApp queues Action --> loop() applies to Player   *
+*       Player state changes --> loop() requests broadcast --WS--> phone  *
+*                                                                        *
+*   Written by Matt Kaufman - December 2025                              *
+*   Rewritten for async + WebSocket - July 2026                          *
+*                                                                        *
+**************************************************************************/
 
-#include <WebApp.h>
+#include <Arduino.h>
+#include <LittleFS.h>
+
 #include <config/wifi.h>
 #include <DFPlayerMini.h>
+#include <Player.h>
+#include <Net.h>
+#include <WebApp.h>
 
 
-// Function prototypes
-void connect_to_wifi();
-bool setup_DFPlayer();
+// MCU pins wired to the DFPlayer clone (see docs/images/schematic.png)
+static constexpr uint8_t MCU_RX = D7;   // XIAO pin going TO module TX
+static constexpr uint8_t MCU_TX = D6;   // XIAO pin going TO module RX
+
+static constexpr char HOSTNAME[] = "whitenoise";
+
+// Networks are tried in order. Credentials live in include/config/wifi.h,
+// which is gitignored -- never inline them here.
+static const Net::Credentials NETWORKS[] = {
+    { wifi::matthew::ssid, wifi::matthew::password },
+    { wifi::delaney::ssid, wifi::delaney::password },
+};
+static constexpr uint8_t NETWORK_COUNT = sizeof(NETWORKS) / sizeof(NETWORKS[0]);
 
 
-// Global log buffer for messages to server
-String log_buffer = "";
+DFPlayerMini df_player(MCU_RX, MCU_TX);
+Player       player(df_player);
+Net          wifi_net(NETWORKS, NETWORK_COUNT, HOSTNAME);
+WebApp       web_app(player, wifi_net);
 
 
-// Globals for debug info on web app
-bool wifi_is_connected = false;
-String wifi_IP_address = "";
-bool DFPlayer_OK = false;
+static void apply(const WebApp::Action& a)
+{
+    using K = WebApp::Action::Kind;
 
-
-// WiFi config
-const char* WIFI_SSID = "ORBI";
-const char* WIFI_PASS = "rjtmkk2448";
-
-
-// MCU RX/TX pins for DFPlayer
-const uint8_t mcu_rx = D7;   // XIAO pin going TO MP3 TX
-const uint8_t mcu_tx = D6;   // XIAO pin going TO MP3 RX
-
-
-// `DFPlayerMini` instance
-DFPlayerMini DFPlayer(mcu_rx, mcu_tx);
-
-// `WebApp` instance
-WebApp web_app(DFPlayer, log_buffer);
-
-
-
+    switch (a.kind) {
+        case K::SELECT_TRACK: player.select_track(a.arg);    break;
+        case K::SET_VOLUME:   player.set_volume(a.arg);      break;
+        case K::PAUSE:        player.pause();                break;
+        case K::RESUME:       player.resume();               break;
+        case K::TOGGLE:       player.toggle();               break;
+        case K::STOP:         player.stop();                 break;
+        case K::FAVORITE:     player.toggle_favorite(a.arg); break;
+        case K::NONE:
+        default:                                             break;
+    }
+}
 
 
 void setup()
 {
     Serial.begin(115200);
-    delay(500);
-    Serial.println("\n--- White Noise Box Booting ---");
+    Serial.println("\n--- White Noise Machine booting ---");
 
-    // Initialize File System
-    if (!SPIFFS.begin(true)) {
-        Serial.println("SPIFFS mount failed!");
-        return;
+    if (!LittleFS.begin(true)) {
+        Serial.println("LittleFS mount failed -- the UI will not be served.");
     }
 
-    // 1) Connect to Wi-Fi
-    connect_to_wifi();
+    player.begin();     // starts UART, restores saved track/volume/favorites
+    wifi_net.begin();   // starts connecting; does not wait for it
+    web_app.begin();    // server is up immediately, even before Wi-Fi lands
 
-    // 2) Setup Web Server & mDNS
-    web_app.begin();
-
-    // 3) Start DFPlayer
-    DFPlayer_OK = setup_DFPlayer();
-
-    if (!DFPlayer_OK) {
-        Serial.println("WARNING: System running without Audio hardware.");
-    }
-
-    Serial.println("--- Setup complete. ---");
-
-    web_app.log();
-    web_app.log("Setup complete.");
-    web_app.log("WiFi connected: " + String(wifi_is_connected));
-    web_app.log("mDNS is setup: " + String(web_app.mDNS_is_setup));
-    web_app.log("WiFi IP address: " + wifi_IP_address);
-    web_app.log("DFPlayer initialized: " + String(DFPlayer_OK));
+    Serial.println("--- Boot complete (audio module warming up) ---");
 }
-
-
-
 
 
 void loop()
 {
-    // Handle HTTP requests
-    web_app.handle_client();
+    wifi_net.tick();
+    player.tick();
+    web_app.tick();
 
-    delay(10);
-}
-
-
-
-
-
-void connect_to_wifi()
-{
-    struct Network {
-        const char* ssid;
-        const char* password;
-    };
-
-    const Network networks[] = {
-        { wifi::matthew::ssid, wifi::matthew::password },
-        { wifi::delaney::ssid, wifi::delaney::password }
-        // { wifi::delaney::ssid, wifi::delaney::password },
-        // { wifi::matthew::ssid, wifi::matthew::password }
-    };
-
-    constexpr unsigned long timeout_ms = 20000;
-
-    WiFi.mode(WIFI_STA);
-
-    for (const auto& network : networks) {
-        Serial.print("Connecting to WiFi: ");
-        Serial.println(network.ssid);
-
-        WiFi.begin(network.ssid, network.password);
-
-        unsigned long start = millis();
-        while (WiFi.status() != WL_CONNECTED && (millis() - start) < timeout_ms) {
-            delay(500);
-            Serial.print(".");
-        }
-
-        if (WiFi.status() == WL_CONNECTED) {
-            Serial.println("\nWiFi connected!");
-            Serial.print("IP address: ");
-            Serial.println(WiFi.localIP());
-            return;  // Exit on successful connection
-        }
-
-        Serial.println("\nFailed to connect to " + String(network.ssid) + ". Trying next network...");
+    // Apply everything the phones asked for since the last pass. Doing this
+    // here (rather than in the WebSocket callback) keeps all state mutation on
+    // a single task -- see the threading note in WebApp.h.
+    WebApp::Action action;
+    while (web_app.next_action(action)) {
+        apply(action);
     }
 
-    Serial.println("All WiFi connection attempts FAILED (continuing without WiFi).");
-}
+    // Push state whenever the box's own view of reality changed.
+    if (player.consume_dirty() || wifi_net.consume_link_change()) {
+        web_app.request_broadcast();
+    }
 
-
-bool setup_DFPlayer()
-{
-    Serial.println("Initializing DFPlayer...");
-
-    Serial.println("Starting DFPlayer serial comms...");
-    DFPlayer.begin();
-    delay(700);
-
-    Serial.println("Selecting SD card (2) as source...");
-    DFPlayer.set_source(2);
-    delay(700);
-
-    Serial.println("Setting volume to 30...");
-    DFPlayer.set_volume(30);
-    delay(700);
-
-    Serial.println("Setting power-on volume to 30...");
-    DFPlayer.set_power_on_volume(30);
-    delay(700);
-
-    byte track_num = 1;
-    Serial.println("Looping track # " + String(track_num));
-    DFPlayer.loop_track(track_num);
-    delay(0);
-
-    return true;
+    delay(1);   // yield to the async TCP task and the idle/watchdog task
 }

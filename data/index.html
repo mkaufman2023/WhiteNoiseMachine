@@ -1,262 +1,607 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-mode="standard">
 <head>
-    <meta charset="utf-8" />
-    <title>White Noise Machine</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<meta charset="utf-8">
+<title>Acoustic Wellness Unit</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
 
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="White Noise">
-    <link rel="apple-touch-icon" href="/icon.svg">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/svg+xml" href="/icon.svg">
-   
-    <style>
-        body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: #111827;
-            color: #e5e7eb;
-            margin: 0;
-            padding: 1.5rem;
-            text-align: center;
-            padding-top: env(safe-area-inset-top, 20px);
-            padding-bottom: 3rem;
-        }
-        h1 {
-            margin-bottom: 0.5rem;
-        }
-        h2 {
-            font-size: 1.1rem;
-            margin-top: 2.5rem;
-            margin-bottom: 1rem;
-            color: #9ca3af;
-            border-top: 1px solid #374151;
-            padding-top: 1.5rem;
-        }
-        .subtitle {
-            font-size: 0.9rem;
-            color: #9ca3af;
-            margin-bottom: 1.5rem;
-        }
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 0.75rem;
-            max-width: 480px;
-            margin: 0 auto;
-        }
-        /* Specific style for control buttons to distinguish them slightly */
-        .control-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-            gap: 0.75rem;
-            max-width: 480px;
-            margin: 0 auto;
-        }
-        button {
-            padding: 0.75rem 1rem;
-            border-radius: 0.75rem;
-            border: none;
-            font-size: 0.95rem;
-            font-weight: 500;
-            cursor: pointer;
-            background: #1f2937;
-            color: #e5e7eb;
-            box-shadow: 0 8px 16px rgba(0,0,0,0.35);
-            transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.15s ease;
-            -webkit-tap-highlight-color: transparent;
-        }
-        button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 12px 22px rgba(0,0,0,0.5);
-            background: #374151;
-        }
-        button:active {
-            transform: translateY(1px) scale(0.98);
-            box-shadow: 0 6px 10px rgba(0,0,0,0.4);
-            background: #111827;
-        }
-        /* Style specifically for the darker control buttons */
-        .btn-control {
-            background: #252f3f;
-            font-size: 0.9rem;
-        }
-        .status {
-            margin-top: 1.5rem;
-            font-size: 0.85rem;
-            color: #9ca3af;
-            min-height: 1.2em;
-            font-family: monospace;
-        }
-        .warning-banner {
-            background-color: #ef4444;
-            color: white;
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-            border-radius: 0.5rem;
-            font-weight: bold;
-            display: none;  /* Hidden by default */
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        /* NEW: Terminal / Serial Monitor Styles */
-        .terminal-container {
-            max-width: 480px;
-            margin: 0 auto;
-            text-align: left;
-        }
-        .terminal-window {
-            background-color: #000;
-            color: #00ff00; /* Classic Terminal Green */
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 0.8rem;
-            padding: 12px;
-            height: 200px;
-            overflow-y: auto;
-            border-radius: 0.5rem;
-            border: 1px solid #374151;
-            white-space: pre-wrap; /* Preserves line breaks from backend */
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
-            margin-bottom: 0.5rem;
-        }
-        .terminal-controls {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .terminal-status {
-            font-size: 0.75rem;
-            color: #6b7280;
-        }
-    </style>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Wellness">
+<meta name="theme-color" content="#0B1418">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="manifest" href="/manifest.json">
+
+<style>
+/* ============================================================
+   Palette. Two temperatures, switched by [data-mode] on <html>.
+   Standard is the Lumon basement: cold blue-green ground, warm
+   bone text, pale institutional cyan. Night drops all blue and
+   pulls luminance way down -- amber is easier on melatonin and
+   won't wreck dark-adapted eyes at 2 a.m.
+   ============================================================ */
+:root {
+  --ink:    #0B1418;
+  --panel:  #111E24;
+  --raised: #16262D;
+  --rule:   #23383F;
+  --accent: #8FD3D8;
+  --bone:   #E8E4D9;
+  --dim:    #6A8288;
+  --glow:   rgba(143, 211, 216, 0.14);
+}
+html[data-mode="night"] {
+  --ink:    #050403;
+  --panel:  #0B0806;
+  --raised: #100B07;
+  --rule:   #241A0D;
+  --accent: #B5762A;
+  --bone:   #9A6C2E;
+  --dim:    #5A3F1C;
+  --glow:   rgba(181, 118, 42, 0.10);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+  margin: 0;
+  padding: calc(env(safe-area-inset-top) + 1rem) 1rem calc(env(safe-area-inset-bottom) + 2rem);
+  background: var(--ink);
+  color: var(--bone);
+  font-family: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  max-width: 34rem;
+  margin-inline: auto;
+  transition: background 400ms ease, color 400ms ease;
+}
+
+/* Institutional label: the workhorse of the whole type system. */
+.eyebrow {
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+/* All numeric data is monospaced. Labels are tracked caps, values are
+   mono -- that split is the typographic personality here, and it costs
+   no font download. */
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- header ---------- */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--rule);
+}
+#brand { user-select: none; cursor: default; }
+
+.lamp {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--dim);
+}
+.lamp .dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--dim);
+  transition: background 300ms ease, box-shadow 300ms ease;
+}
+.lamp[data-up="1"] { color: var(--accent); }
+.lamp[data-up="1"] .dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--glow);
+}
+.lamp[data-up="0"] .dot { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 0.25; } 50% { opacity: 1; } }
+
+/* ---------- now playing ---------- */
+.now { padding: 1.6rem 0 1.4rem; }
+.now-name {
+  font-size: 2rem;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0.5rem 0 0.4rem;
+}
+.now-meta {
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+
+button {
+  font-family: inherit;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  color: var(--bone);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, transform 80ms ease;
+}
+button:active { transform: scale(0.985); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+#btnToggle {
+  width: 100%;
+  margin-top: 1.2rem;
+  padding: 1.15rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  border-radius: 2px;
+  border-color: var(--accent);
+  color: var(--accent);
+  background: transparent;
+}
+#btnToggle[data-on="1"] { background: var(--glow); }
+
+/* ---------- volume ---------- */
+.vol { padding: 1.3rem 0 1.5rem; border-top: 1px solid var(--rule); }
+.vol-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.9rem;
+}
+.readout {
+  font-size: 1.65rem;
+  font-weight: 300;
+  color: var(--accent);
+  line-height: 1;
+}
+/* Shown only while the actual level is still walking to the setpoint --
+   this is the fade engine made visible. */
+.target {
+  font-size: 0.78rem;
+  color: var(--dim);
+  margin-left: 0.4rem;
+}
+
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 44px;              /* full-height touch target */
+  background: transparent;
+  margin: 0;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--rule);
+}
+input[type=range]::-moz-range-track { height: 2px; background: var(--rule); }
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 26px; height: 26px;
+  margin-top: -12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  box-shadow: 0 0 0 6px var(--glow);
+}
+input[type=range]::-moz-range-thumb {
+  width: 26px; height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* ---------- sections ---------- */
+section.block { padding-top: 1.3rem; border-top: 1px solid var(--rule); }
+.block-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.85rem;
+}
+.hint {
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rule);
+}
+
+/* ---------- pinned ---------- */
+.fav-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 1.4rem;
+}
+.fav {
+  text-align: left;
+  padding: 1.05rem 0.9rem;
+  border-radius: 2px;
+  background: var(--raised);
+}
+.fav .n {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.fav .f {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  color: var(--dim);
+}
+.fav[data-active="1"] {
+  border-color: var(--accent);
+  background: var(--glow);
+}
+.fav[data-active="1"] .n { color: var(--accent); }
+
+/* ---------- full list ---------- */
+.list { list-style: none; margin: 0; padding: 0; }
+.list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.95rem 0.9rem 0.95rem 0.75rem;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  border-left: 2px solid transparent;
+  font-size: 0.98rem;
+  font-weight: 300;
+  text-align: left;
+}
+.list button[data-active="1"] {
+  border-left-color: var(--accent);
+  color: var(--accent);
+  background: var(--glow);
+}
+.list .file {
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+}
+.list .pin { color: var(--accent); margin-right: 0.5rem; font-size: 0.7rem; }
+
+/* ---------- footer / diagnostics ---------- */
+footer { margin-top: 1.8rem; display: flex; gap: 0.6rem; }
+footer button {
+  flex: 1;
+  padding: 0.9rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border-radius: 2px;
+  color: var(--dim);
+}
+footer button[data-on="1"] { color: var(--accent); border-color: var(--accent); }
+
+.diag { margin-top: 1.2rem; padding-top: 1.2rem; border-top: 1px solid var(--rule); }
+.diag-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem 1rem;
+  font-size: 0.72rem;
+  margin-bottom: 0.9rem;
+}
+.diag-grid span:nth-child(odd) { color: var(--dim); letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.6rem; }
+#term {
+  height: 11rem;
+  overflow-y: auto;
+  padding: 0.7rem;
+  background: #000;
+  color: var(--accent);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border: 1px solid var(--rule);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
 </head>
+
 <body>
-    <div id="hw-alert" class="warning-banner">
-        ⚠ Hardware Failure: DFPlayer not detected. Check internal wiring/SD card.
-    </div>
 
-    <h1>White Noise Machine</h1>
-    <div class="subtitle">Select a sound to play it</div>
+<header>
+  <div class="eyebrow" id="brand">Acoustic Wellness Unit</div>
+  <div class="lamp" id="lamp" data-up="0"><span class="dot"></span><span id="lampText">Linking</span></div>
+</header>
 
-    <div class="grid">
-        <button onclick="play_track(1)">✈ Airplane Cabin</button>
-        <button onclick="play_track(2)">🌌 Celestial</button>
-        <button onclick="play_track(3)">⛈ Thunderstorm</button>
-        <button onclick="play_track(4)">🌧 Rain</button>
-        <button onclick="play_track(5)">🌿 Rainforest</button>
-        <button onclick="play_track(6)">🏞 Waterfall</button>
-        <button onclick="play_track(7)">⛲ Water Fountain</button>
-        <button onclick="play_track(8)">🌊 Ocean Waves</button>
-        <button onclick="play_track(9)">🌀 Fan</button>
-        <button onclick="play_track(10)">🔥 Campfire</button>
-        <button onclick="play_track(11)">🚿 Shower</button>
-        <button onclick="play_track(12)">💨 Hairdryer</button>
-        <button onclick="play_track(13)">🧹 Vacuum</button>
-        <button onclick="play_track(14)">🍲 Soup</button>
-    </div>
+<section class="now">
+  <div class="eyebrow">Now refining</div>
+  <div class="now-name" id="nowName">&mdash;</div>
+  <div class="now-meta mono" id="nowMeta">Waiting for the box</div>
+  <button id="btnToggle" data-on="0">Play</button>
+</section>
 
-    <h2>Playback Controls</h2>
-    <div class="control-grid">
-        <button class="btn-control" onclick="control('previous')">⏮ Prev</button>
-        <button class="btn-control" onclick="control('pause')">⏸ Pause</button>
-        <button class="btn-control" onclick="control('next')">⏭ Next</button>
+<section class="vol">
+  <div class="vol-head">
+    <span class="eyebrow">Volume</span>
+    <span>
+      <span class="readout mono" id="volNow">0</span><span class="target mono" id="volTarget"></span>
+    </span>
+  </div>
+  <input type="range" id="volSlider" min="0" max="30" step="1" value="0" aria-label="Volume">
+</section>
 
-        <button class="btn-control" onclick="control('volume_down')">🔉 Vol -</button>
-        <button class="btn-control" onclick="control('resume')">▶ Resume</button>
-        <button class="btn-control" onclick="control('volume_up')">🔊 Vol +</button>
-        
-        <button class="btn-control" onclick="control('start_repeat')">🔁 Loop On</button>
-        <button class="btn-control" onclick="control('stop')">⏹ Stop</button>
-        <button class="btn-control" onclick="control('stop_repeat')">➡ Loop Off</button>
-        
-        <!-- <button class="btn-control" onclick="control('set_eq_normal')">Set EQ Normal</button>
-        <button class="btn-control" onclick="control('set_eq_rock')">Set EQ Rock</button>
-        <button class="btn-control" onclick="control('set_eq_pop')">Set EQ Pop</button> -->
-    </div>
+<section class="block" id="favBlock" hidden>
+  <div class="block-head"><span class="eyebrow">Pinned</span></div>
+  <div class="fav-grid" id="favGrid"></div>
+</section>
 
-    <h2>Serial Monitor</h2>
-    <div class="terminal-container">
-        <div id="terminal" class="terminal-window">Waiting for logs...</div>
-        <div class="terminal-controls">
-            <span class="terminal-status">Polling /log every 2s</span>
-            <button class="btn-control" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="clearTerminal()">Clear</button>
-        </div>
-    </div>
+<section class="block">
+  <div class="block-head">
+    <span class="eyebrow">All sounds</span>
+    <span class="hint">Hold a row to pin</span>
+  </div>
+  <ul class="list" id="list"></ul>
+</section>
 
-    <div class="status" id="status">Ready</div>
+<footer>
+  <button id="btnNight">Night mode</button>
+  <button id="btnStop">Stop</button>
+</footer>
 
-    <script>
-        const terminal = document.getElementById('terminal');
-        const status_element = document.getElementById('status');
+<section class="diag" id="diag" hidden>
+  <div class="diag-grid mono">
+    <span>Address</span><span id="dIp">&mdash;</span>
+    <span>Signal</span><span id="dRssi">&mdash;</span>
+    <span>mDNS</span><span id="dMdns">&mdash;</span>
+    <span>Audio module</span><span id="dHw">&mdash;</span>
+    <span>Uptime</span><span id="dUp">&mdash;</span>
+    <span>File</span><span id="dFile">&mdash;</span>
+  </div>
+  <div id="term" class="mono">Diagnostics open. Log streaming.</div>
+</section>
 
-        // Logic for playing specific tracks
-        async function play_track(n) {
-            status_element.textContent = 'Switching to track ' + n + '...';
-            try {
-                const result = await fetch('/play?track=' + encodeURIComponent(n));
-                if (!result.ok) {
-                    status_element.textContent = 'Error: ' + result.status;
-                    return;
-                }
-                const text = await result.text();
-                status_element.textContent = text || ('Now playing track ' + n);
-            } catch (e) {
-                status_element.textContent = 'Request failed.';
-            }
-        };
+<script>
+"use strict";
 
-        // Logic for generic control buttons
-        async function control(command) {
-            status_element.textContent = 'Sending: ' + command + '...';
-            try {
-                // Hits endpoints like /next, /stop, /vol_up
-                const result = await fetch('/' + command);
-                if (!result.ok) {
-                    status_element.textContent = 'Error: ' + result.status;
-                    return;
-                }
-                status_element.textContent = 'Command executed: ' + command;
-            } catch (e) {
-                status_element.textContent = 'Command failed: ' + command;
-            }
-        }
+/* Track list. Index matches /mp3/000N.mp3 on the SD card. */
+const SOUNDS = [
+  [1,  "Airplane Cabin"], [2,  "Celestial"],     [3,  "Thunderstorm"],
+  [4,  "Rain"],           [5,  "Rainforest"],    [6,  "Waterfall"],
+  [7,  "Water Fountain"], [8,  "Ocean Waves"],   [9,  "Fan"],
+  [10, "Campfire"],       [11, "Shower"],        [12, "Hairdryer"],
+  [13, "Vacuum"],         [14, "Soup"]
+];
+const NAME = new Map(SOUNDS);
+const pad4 = n => String(n).padStart(4, "0");
 
-        // Serial Monitor Logic
-        function clearTerminal() {
-            terminal.textContent = '';
-        }
-        async function fetchLogs() {
-            try {
-                // Requires backend to have a route '/log' that returns text
-                const response = await fetch('/log'); 
-                if (response.ok) {
-                    const text = await response.text();
-                    if (text && text.length > 0) {
-                        terminal.textContent += text;
-                        // Auto-scroll to bottom
-                        terminal.scrollTop = terminal.scrollHeight;
-                    }
-                }
-            } catch (e) {
-                // Fail silently to avoid spamming console
-            }
-        }
+const el = id => document.getElementById(id);
+let ws = null, backoff = 500, dragging = false, lastSent = 0, diagOpen = false;
+let state = { play:false, trk:1, vol:0, vnow:0, fade:false, hw:false, favs:0,
+              rssi:0, ip:"", mdns:false, up:0 };
 
-        window.onload = async function() {
-            try {
-                const result = await fetch('/status');
-                const state = await result.text();
+/* ---------- transport ---------- */
+function connect() {
+  ws = new WebSocket("ws://" + location.host + "/ws");
 
-                if (state === "0") {
-                    document.getElementById('hw-alert').style.display = 'block';
-                }
-            } catch (e) {
-                console.log("Could not fetch status");
-            }
+  ws.onopen = () => {
+    backoff = 500;
+    setLamp(true);
+    if (diagOpen) send("log_on");
+    send("state");
+  };
 
-            // Start the log polling loop (every 2000ms)
-            setInterval(fetchLogs, 2000);
-        };
-    </script>
+  ws.onclose = () => {
+    setLamp(false);
+    setTimeout(connect, backoff);
+    backoff = Math.min(backoff * 1.6, 5000);
+  };
+
+  ws.onmessage = ev => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.t === "s") { state = m; render(); }
+    else if (m.t === "l") { appendLog(m.m); }
+  };
+}
+
+function send(cmd, extra) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(Object.assign({ cmd }, extra)));
+}
+
+function setLamp(up) {
+  el("lamp").dataset.up = up ? "1" : "0";
+  el("lampText").textContent = up ? "Linked" : "Not linked";
+  if (!up) el("nowMeta").textContent = "The box is off or off-network";
+}
+
+/* ---------- render ---------- */
+function render() {
+  el("nowName").textContent = NAME.get(state.trk) || "\u2014";
+
+  el("nowMeta").textContent = !state.hw
+      ? "Audio module not responding"
+      : (state.play ? "Looping \u00b7 file " + pad4(state.trk) : "Paused");
+
+  const t = el("btnToggle");
+  t.textContent = state.play ? "Pause" : "Play";
+  t.dataset.on = state.play ? "1" : "0";
+
+  /* Actual level, which walks to the setpoint during a fade. */
+  el("volNow").textContent = state.vnow;
+  el("volTarget").textContent = (state.vnow !== state.vol) ? "\u2192 " + state.vol : "";
+
+  /* Never fight the thumb while a finger is on it. */
+  if (!dragging) el("volSlider").value = state.vol;
+
+  renderFavorites();
+  document.querySelectorAll("#list button").forEach(b => {
+    const n = Number(b.dataset.track);
+    b.dataset.active = (n === state.trk && state.play) ? "1" : "0";
+    b.querySelector(".pin").textContent = isFav(n) ? "\u25C6" : "";
+  });
+
+  if (diagOpen) renderDiag();
+}
+
+const isFav = n => (state.favs & (1 << (n - 1))) !== 0;
+
+function renderFavorites() {
+  const pinned = SOUNDS.filter(([n]) => isFav(n));
+  el("favBlock").hidden = pinned.length === 0;
+
+  const grid = el("favGrid");
+  grid.textContent = "";
+  for (const [n, name] of pinned) {
+    const b = document.createElement("button");
+    b.className = "fav";
+    b.dataset.track = n;
+    b.dataset.active = (n === state.trk && state.play) ? "1" : "0";
+    b.innerHTML = '<span class="n"></span><span class="f mono">File ' + pad4(n) + "</span>";
+    b.querySelector(".n").textContent = name;
+    bindSound(b, n);
+    grid.appendChild(b);
+  }
+}
+
+function renderDiag() {
+  el("dIp").textContent   = state.ip || "\u2014";
+  el("dRssi").textContent = state.rssi ? state.rssi + " dBm" : "\u2014";
+  el("dMdns").textContent = state.mdns ? "whitenoise.local" : "down";
+  el("dHw").textContent   = state.hw ? "ready" : "not ready";
+  el("dFile").textContent = "/mp3/" + pad4(state.trk) + ".mp3";
+  const s = state.up || 0;
+  el("dUp").textContent = Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
+}
+
+function appendLog(line) {
+  const t = el("term");
+  t.textContent += "\n" + line;
+  if (t.textContent.length > 6000) t.textContent = t.textContent.slice(-4000);
+  t.scrollTop = t.scrollHeight;
+}
+
+/* ---------- sound list ---------- */
+function buildList() {
+  const ul = el("list");
+  for (const [n, name] of SOUNDS) {
+    const li = document.createElement("li");
+    const b  = document.createElement("button");
+    b.dataset.track = n;
+    b.dataset.active = "0";
+    b.innerHTML = '<span><span class="pin mono"></span><span class="nm"></span></span>' +
+                  '<span class="file mono">' + pad4(n) + "</span>";
+    b.querySelector(".nm").textContent = name;
+    bindSound(b, n);
+    li.appendChild(b);
+    ul.appendChild(li);
+  }
+}
+
+/* Tap plays. Hold pins or unpins -- the hold must not also fire the tap. */
+function bindSound(node, track) {
+  let timer = null, held = false;
+
+  const start = () => {
+    held  = false;
+    timer = setTimeout(() => {
+      held = true;
+      send("favorite", { track });
+      if (navigator.vibrate) navigator.vibrate(18);
+    }, 500);
+  };
+  const cancel = () => { clearTimeout(timer); };
+
+  node.addEventListener("pointerdown", start);
+  node.addEventListener("pointerup", cancel);
+  node.addEventListener("pointerleave", cancel);
+  node.addEventListener("pointercancel", cancel);
+  node.addEventListener("contextmenu", e => e.preventDefault());
+  node.addEventListener("click", () => {
+    if (held) { held = false; return; }
+    send("play", { track });
+    /* Optimistic: light up immediately, reconcile when the box reports back. */
+    state.trk = track; state.play = true; render();
+  });
+}
+
+/* ---------- controls ---------- */
+el("btnToggle").addEventListener("click", () => {
+  send("toggle");
+  state.play = !state.play; render();
+});
+
+el("btnStop").addEventListener("click", () => {
+  send("stop");
+  state.play = false; render();
+});
+
+const slider = el("volSlider");
+slider.addEventListener("pointerdown", () => { dragging = true; });
+slider.addEventListener("input", () => {
+  const v = Number(slider.value);
+  el("volNow").textContent = v;         /* immediate local feedback */
+  el("volTarget").textContent = "";
+  const now = Date.now();
+  if (now - lastSent > 60) { send("volume", { value: v }); lastSent = now; }
+});
+const release = () => {
+  if (!dragging) return;
+  dragging = false;
+  send("volume", { value: Number(slider.value) });   /* always land the final value */
+};
+slider.addEventListener("pointerup", release);
+slider.addEventListener("pointercancel", release);
+slider.addEventListener("change", release);
+
+/* ---------- night mode ---------- */
+function applyNight(on) {
+  document.documentElement.dataset.mode = on ? "night" : "standard";
+  el("btnNight").dataset.on = on ? "1" : "0";
+  document.querySelector('meta[name="theme-color"]')
+          .setAttribute("content", on ? "#050403" : "#0B1418");
+  try { localStorage.setItem("wnm-night", on ? "1" : "0"); } catch {}
+}
+el("btnNight").addEventListener("click", () => {
+  applyNight(document.documentElement.dataset.mode !== "night");
+});
+
+/* ---------- diagnostics: hold the title ---------- */
+(function () {
+  let timer = null;
+  const brand = el("brand");
+  const open = () => {
+    diagOpen = !diagOpen;
+    el("diag").hidden = !diagOpen;
+    send(diagOpen ? "log_on" : "log_off");
+    if (diagOpen) renderDiag();
+    if (navigator.vibrate) navigator.vibrate(18);
+  };
+  brand.addEventListener("pointerdown", () => { timer = setTimeout(open, 900); });
+  ["pointerup", "pointerleave", "pointercancel"].forEach(e =>
+    brand.addEventListener(e, () => clearTimeout(timer)));
+})();
+
+/* ---------- boot ---------- */
+let night = false;
+try { night = localStorage.getItem("wnm-night") === "1"; } catch {}
+applyNight(night);
+buildList();
+render();
+connect();
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+}
+</script>
 </body>
 </html>

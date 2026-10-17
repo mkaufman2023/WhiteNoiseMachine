@@ -3,5 +3,9 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
-include/config/wifi.h
 mp3_names.txt
+
+# Credentials -- never commit these.
+include/config/wifi.h
+lib/HomeWiFi/wificonfig.h
+**/wificonfig.h
