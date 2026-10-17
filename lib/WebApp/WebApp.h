@@ -87,6 +87,9 @@ private:
     std::mutex _state_mutex;
     String     _state_json;   /**< Latest state, built on the loop task; read by /api/state */
 
+    char        _ui_build[9] = "";   /**< Fingerprint of the built-in web files, 8 hex digits */
+    std::string _sw_js;              /**< sw.js with that fingerprint appended */
+
     bool start_https();
     bool start_redirect();
     void broadcast_now();
