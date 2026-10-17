@@ -165,7 +165,7 @@ void WebApp::build_state_json(String& out)
     doc["vol"]   = s.volume;       // setpoint: where the slider sits
     doc["vnow"]  = s.volume_now;   // actual: the number you watch walk
     doc["fade"]  = s.fading;
-    doc["hw"]    = s.hw_ready;
+    doc["hw"]    = (uint8_t)s.hw;  // Player::Hw: 0 warming, 1 ok, 2 no replies, 3 fault
     doc["favs"]  = s.favorites;
     doc["rssi"]  = _net.rssi();
     doc["ip"]    = _net.ip();

@@ -387,8 +387,12 @@ const pad4 = n => String(n).padStart(4, "0");
 
 const el = id => document.getElementById(id);
 let ws = null, backoff = 500, dragging = false, lastSent = 0, diagOpen = false;
-let state = { play:false, trk:1, vol:0, vnow:0, fade:false, hw:false, favs:0,
+let state = { play:false, trk:1, vol:0, vnow:0, fade:false, hw:0, favs:0,
               rssi:0, ip:"", mdns:false, up:0 };
+
+/* Audio module status, as reported by the box (Player::Hw). */
+const HW_WARMING = 0, HW_FAULT = 3;
+const HW_TEXT = ["warming up", "ready", "no replies (fixed timing)", "not responding"];
 
 /* ---------- transport ---------- */
 function connect() {
@@ -428,8 +432,9 @@ function setLamp(up) {
 function render() {
   el("nowName").textContent = NAME.get(state.trk) || "\u2014";
 
-  el("nowMeta").textContent = !state.hw
-      ? "Audio module not responding"
+  el("nowMeta").textContent =
+        state.hw === HW_WARMING ? "Warming up"
+      : state.hw === HW_FAULT   ? "Audio module not responding"
       : (state.play ? "Looping \u00b7 file " + pad4(state.trk) : "Paused");
 
   const t = el("btnToggle");
@@ -477,7 +482,7 @@ function renderDiag() {
   el("dIp").textContent   = state.ip || "\u2014";
   el("dRssi").textContent = state.rssi ? state.rssi + " dBm" : "\u2014";
   el("dMdns").textContent = state.mdns ? "whitenoise.local" : "down";
-  el("dHw").textContent   = state.hw ? "ready" : "not ready";
+  el("dHw").textContent   = HW_TEXT[state.hw] || "—";
   el("dFile").textContent = "/mp3/" + pad4(state.trk) + ".mp3";
   const s = state.up || 0;
   el("dUp").textContent = Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
