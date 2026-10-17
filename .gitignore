@@ -9,3 +9,6 @@ mp3_names.txt
 include/config/secrets.h
 include/config/wifi.h
 **/wificonfig.h
+
+# Host test build output
+test/host/test_player
