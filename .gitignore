@@ -10,6 +10,9 @@ include/config/secrets.h
 include/config/wifi.h
 **/wificonfig.h
 
+# HTTPS keys and certificates from tools/make_certs.py
+certs/
+
 # Host test build output
 test/host/test_player
 test/host/test_frames

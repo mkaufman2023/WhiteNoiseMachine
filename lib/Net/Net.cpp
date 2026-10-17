@@ -121,8 +121,8 @@ void Net::start_mdns()
         return;
     }
 
-    MDNS.addService("http", "tcp", 80);
+    MDNS.addService("https", "tcp", 443);
     _mdns_up = true;
 
-    Serial.println("Net: mDNS up at http://" + String(_hostname) + ".local");
+    Serial.println("Net: mDNS up at https://" + String(_hostname) + ".local");
 }

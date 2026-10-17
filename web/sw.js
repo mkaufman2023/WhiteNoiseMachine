@@ -8,7 +8,7 @@
  * instantly from cache and shows "Not linked" in its own voice, then connects
  * itself as soon as the box answers.
  *
- * Bump CACHE when anything in data/ changes, or phones will keep the old shell.
+ * Bump CACHE when anything in web/ changes, or phones will keep the old shell.
  */
 
 const CACHE = "wnm-v2";
