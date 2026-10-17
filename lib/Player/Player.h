@@ -31,6 +31,9 @@ public:
      * Everything the phone needs to render the UI. This is the single source
      * of truth -- the UI never guesses, it only draws what the box reports.
      *
+     * `playing` is what the listener asked for: it turns false the moment
+     * Pause or Stop is pressed, even though the sound takes a second to fade.
+     *
      * `volume` is the setpoint (what was asked for); `volume_now` is what the
      * module is actually at, which differs from `volume` while a fade walks.
      * The UI shows the slider at `volume` and the numeric readout at
@@ -65,7 +68,12 @@ public:
     /** Fades out, then pauses. */
     void pause();
 
-    /** Resumes, fading up to the stored setpoint. */
+    /**
+     * Starts the sound again, fading up from silence to the setpoint.
+     * Unpauses if the module is paused; otherwise (fresh boot, after Stop)
+     * starts the selected track in loop mode. Pressed during a fade-out to
+     * pause or stop, it turns the fade back around instead.
+     */
     void resume();
 
     /** Convenience: pause if playing, resume if not. */
@@ -95,7 +103,7 @@ private:
     static constexpr uint32_t WARMUP_MS      = 2500;  /**< Module power-on settling time */
     static constexpr uint32_t SAVE_DEBOUNCE_MS = 5000;/**< Delay before writing NVS, to spare flash */
 
-    enum class Cmd : uint8_t { NONE, SET_SOURCE, LOOP_TRACK, PLAY, PAUSE, STOP, POWER_ON_VOL };
+    enum class Cmd : uint8_t { NONE, SET_SOURCE, SET_VOL, LOOP_TRACK, PLAY, PAUSE, STOP, POWER_ON_VOL };
     enum class Seq : uint8_t { IDLE, OUT_TO_SWITCH, OUT_TO_PAUSE, OUT_TO_STOP, IN };
 
     struct QCmd { Cmd cmd; uint8_t arg; };
@@ -117,6 +125,7 @@ private:
     uint8_t  _vol_target     = 0;
     uint8_t  _pending_track  = 1;
     bool     _vol_write_due  = false;   /**< Latest-value-wins volume write */
+    bool     _paused         = false;   /**< Module is paused mid-track, so PLAY resumes it */
 
     /* Timing */
     uint32_t _t_begin        = 0;
@@ -130,6 +139,7 @@ private:
     bool queue_push(Cmd cmd, uint8_t arg = 0);
     bool queue_pop(QCmd& out);
     void transmit(const QCmd& c);
+    void start_playback(Cmd cmd, uint8_t arg = 0);
     void advance_sequence();
     void begin_fade(uint8_t target);
     void mark_dirty();
