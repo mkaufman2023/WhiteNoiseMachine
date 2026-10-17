@@ -3,9 +3,10 @@
 *   Net.h                                                                *
 *   Non-blocking Wi-Fi connection manager with mDNS re-advertisement.    *
 *                                                                        *
-*   Replaces the old one-shot connect_to_wifi(), which ran once in       *
-*   setup() and never again -- meaning a router reboot left the box       *
-*   unreachable until someone physically unplugged it.                    *
+*   Connects to the one home network and keeps it that way: the core's  *
+*   auto-reconnect handles routine drops, and tick() restarts the        *
+*   connection if a drop lasts long enough that auto-reconnect has       *
+*   evidently given up (it doesn't retry after every disconnect reason). *
 *                                                                        *
 *   Written by Matt Kaufman - July 2026                                  *
 *                                                                        *
@@ -19,53 +20,43 @@
 
 class Net {
 public:
-    struct Credentials {
-        const char* ssid;
-        const char* password;
-    };
-
     /**
-     * @param networks  Array of networks to try, in order.
-     * @param count     Number of entries in `networks`.
+     * @param ssid      Network name.
+     * @param password  Network password.
      * @param hostname  mDNS/DHCP hostname (e.g. "whitenoise").
      */
-    Net(const Credentials* networks, uint8_t count, const char* hostname);
+    Net(const char* ssid, const char* password, const char* hostname);
 
-    /** Starts the first connection attempt. Does not block. */
+    /** Starts connecting. Does not block. */
     void begin();
 
-    /** Drives the connection state machine. Call every loop() iteration. */
+    /** Watches the link and restarts it if it stays down. Call every loop() iteration. */
     void tick();
 
     bool    connected() const;
     bool    mdns_up()   const { return _mdns_up; }
     int8_t  rssi()      const;
     String  ip()        const;
-    const char* ssid()  const;
 
     /** True once after the link comes up or goes down, then clears. */
     bool consume_link_change();
 
 
 private:
-    static constexpr uint32_t ATTEMPT_TIMEOUT_MS = 8000;   /**< Per-network attempt */
-    static constexpr uint32_t RETRY_BACKOFF_MS   = 5000;   /**< Pause after a full sweep */
+    static constexpr uint32_t RESTART_AFTER_MS = 30000;  /**< Down this long -> start the connection over */
 
-    enum class St : uint8_t { IDLE, CONNECTING, ONLINE, BACKOFF };
+    const char* _ssid;
+    const char* _password;
+    const char* _hostname;
 
-    const Credentials* _nets;
-    uint8_t            _count;
-    const char*        _hostname;
+    bool     _up           = false;
+    bool     _mdns_up      = false;
+    bool     _link_changed = false;
+    uint32_t _t_down       = 0;      /**< When the link went down (or the last restart) */
 
-    St       _st            = St::IDLE;
-    uint8_t  _index         = 0;
-    uint32_t _t_state       = 0;
-    bool     _mdns_up       = false;
-    bool     _link_changed  = false;
-
-    void start_attempt(uint8_t index);
-    void on_connected();
-    void on_lost();
+    void connect();
+    void on_up();
+    void on_down();
     void start_mdns();
 };
 

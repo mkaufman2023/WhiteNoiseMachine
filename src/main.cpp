@@ -18,7 +18,7 @@
 #include <Arduino.h>
 #include <LittleFS.h>
 
-#include <config/wifi.h>
+#include <config/secrets.h>
 #include <DFPlayerMini.h>
 #include <Player.h>
 #include <Net.h>
@@ -31,18 +31,12 @@ static constexpr uint8_t MCU_TX = D6;   // XIAO pin going TO module RX
 
 static constexpr char HOSTNAME[] = "whitenoise";
 
-// Networks are tried in order. Credentials live in include/config/wifi.h,
-// which is gitignored -- never inline them here.
-static const Net::Credentials NETWORKS[] = {
-    { wifi::matthew::ssid, wifi::matthew::password },
-    { wifi::delaney::ssid, wifi::delaney::password },
-};
-static constexpr uint8_t NETWORK_COUNT = sizeof(NETWORKS) / sizeof(NETWORKS[0]);
 
-
+// Credentials live in include/config/secrets.h, which is gitignored --
+// never inline them here.
 DFPlayerMini df_player(MCU_RX, MCU_TX);
 Player       player(df_player);
-Net          wifi_net(NETWORKS, NETWORK_COUNT, HOSTNAME);
+Net          wifi_net(secrets::wifi_ssid, secrets::wifi_password, HOSTNAME);
 WebApp       web_app(player, wifi_net);
 
 
