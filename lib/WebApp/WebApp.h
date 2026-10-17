@@ -32,6 +32,7 @@
 #include <Arduino.h>
 #include <atomic>
 #include <mutex>
+#include <string>
 #include <esp_http_server.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
@@ -56,7 +57,7 @@ public:
     /** Starts the HTTPS server (UI, WebSocket, /api/state) and the port-80 redirect. */
     void begin();
 
-    /** Sends deferred state broadcasts. Call every loop() iteration. */
+    /** Sends deferred state broadcasts and new log lines. Call every loop() iteration. */
     void tick();
 
     /** Pops one queued Action. Returns false when the queue is empty. */
@@ -79,8 +80,9 @@ private:
     httpd_handle_t _redirect = nullptr;
     QueueHandle_t  _actions  = nullptr;
 
-    std::atomic<bool> _broadcast_due { false };
-    uint32_t          _t_last_bcast = 0;
+    std::atomic<bool>     _broadcast_due { false };
+    uint32_t              _t_last_bcast = 0;
+    std::atomic<uint32_t> _log_sent { 0 };   /**< Newest log line already pushed to subscribers */
 
     std::mutex _state_mutex;
     String     _state_json;   /**< Latest state, built on the loop task; read by /api/state */
@@ -88,8 +90,11 @@ private:
     bool start_https();
     bool start_redirect();
     void broadcast_now();
+    void push_new_log_lines();
+    void queue_send(std::string text, bool log_only);
     void build_state_json(String& out);
-    void handle_ws_message(const uint8_t* data, size_t len);
+    void handle_ws_message(httpd_req_t* req, const uint8_t* data, size_t len);
+    void subscribe_to_log(httpd_req_t* req);
 
     /* Server handlers. Static, because ESP-IDF calls plain functions; `this`
      * arrives through each handler's user_ctx. */

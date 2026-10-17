@@ -18,6 +18,7 @@
 #include <ArduinoJson.h>
 #include <Player.h>
 #include <Net.h>
+#include <Logbook.h>
 
 
 /* -----------------------------------------------------------------------
@@ -64,11 +65,30 @@ namespace
         { "/apple-touch-icon.png", "image/png",                 "max-age=604800", icon_180_png_start,  icon_180_png_end  },  // iOS looks here by convention
     };
 
-    /** A state message on its way to the server task, which does the sending. */
+    /** A message on its way to the server task, which does the sending. */
     struct Outgoing {
         httpd_handle_t server;
         std::string    text;
+        bool           log_only;   /**< Only to phones with the diagnostics panel open */
     };
+
+    // Marks a phone that has the diagnostics panel open. It's stored as that
+    // WebSocket's session context, so ESP-IDF forgets it by itself when the
+    // phone disconnects. Only its address matters.
+    char LOG_SUBSCRIBER;
+    void keep_subscriber(void*) { }   // the session context's "free" function: nothing to free
+
+    /** {"t": type, "m": lines} -- "l" appends to the panel, "L" replaces it. */
+    std::string log_message(const char* type, const std::string& lines)
+    {
+        JsonDocument doc;
+        doc["t"] = type;
+        doc["m"] = lines;
+
+        std::string out;
+        serializeJson(doc, out);
+        return out;
+    }
 }
 
 
@@ -83,10 +103,10 @@ void WebApp::begin()
     build_state_json(_state_json);   // so /api/state answers before the first broadcast
 
     if (start_https()) {
-        Serial.println("WebApp: HTTPS server listening on port 443");
+        logbook::add("Web: HTTPS server listening on port 443");
     }
     if (start_redirect()) {
-        Serial.println("WebApp: port 80 redirects to HTTPS");
+        logbook::add("Web: port 80 redirects to HTTPS");
     }
 }
 
@@ -96,6 +116,8 @@ void WebApp::tick()
     if (_broadcast_due && (millis() - _t_last_bcast) >= MIN_BROADCAST_GAP_MS) {
         broadcast_now();
     }
+
+    push_new_log_lines();
 }
 
 
@@ -131,7 +153,7 @@ bool WebApp::start_https()
     conf.httpd.uri_match_fn     = httpd_uri_match_wildcard;
 
     if (httpd_ssl_start(&_https, &conf) != ESP_OK) {
-        Serial.println("WebApp: HTTPS server failed to start -- check the certificate (tools/make_certs.py)");
+        logbook::add("Web: HTTPS server failed to start -- check the certificate (tools/make_certs.py)");
         _https = nullptr;
         return false;
     }
@@ -174,7 +196,7 @@ bool WebApp::start_redirect()
     conf.uri_match_fn     = httpd_uri_match_wildcard;
 
     if (httpd_start(&_redirect, &conf) != ESP_OK) {
-        Serial.println("WebApp: port 80 redirect failed to start");
+        logbook::add("Web: port 80 redirect failed to start");
         _redirect = nullptr;
         return false;
     }
@@ -233,6 +255,7 @@ esp_err_t WebApp::on_ws(httpd_req_t* req)
     // The handshake arrives as a GET. Push state to the new phone -- from
     // loop(), the only task allowed to read Player.
     if (req->method == HTTP_GET) {
+        logbook::add("Web: a phone connected");
         self->_broadcast_due = true;
         return ESP_OK;
     }
@@ -251,7 +274,7 @@ esp_err_t WebApp::on_ws(httpd_req_t* req)
     }
 
     if (frame.type == HTTPD_WS_TYPE_TEXT) {
-        self->handle_ws_message(buf, frame.len);
+        self->handle_ws_message(req, buf, frame.len);
     }
     return ESP_OK;
 }
@@ -270,7 +293,7 @@ esp_err_t WebApp::on_redirect(httpd_req_t* req)
 }
 
 
-/** Sends one state message to every connected phone. Runs on the server's task. */
+/** Sends one message to every connected phone (or every log subscriber). Runs on the server's task. */
 void WebApp::send_to_all(void* arg)
 {
     std::unique_ptr<Outgoing> out(static_cast<Outgoing*>(arg));
@@ -285,9 +308,10 @@ void WebApp::send_to_all(void* arg)
     frame.len     = out->text.size();
 
     for (size_t i = 0; i < count; i++) {
-        if (httpd_ws_get_fd_info(out->server, fds[i]) == HTTPD_WS_CLIENT_WEBSOCKET) {
-            httpd_ws_send_frame_async(out->server, fds[i], &frame);
-        }
+        if (httpd_ws_get_fd_info(out->server, fds[i]) != HTTPD_WS_CLIENT_WEBSOCKET) continue;
+        if (out->log_only && httpd_sess_get_ctx(out->server, fds[i]) != &LOG_SUBSCRIBER) continue;
+
+        httpd_ws_send_frame_async(out->server, fds[i], &frame);
     }
 }
 
@@ -296,7 +320,7 @@ void WebApp::send_to_all(void* arg)
  *  State and commands
  * ======================================================================= */
 
-void WebApp::handle_ws_message(const uint8_t* data, size_t len)
+void WebApp::handle_ws_message(httpd_req_t* req, const uint8_t* data, size_t len)
 {
     JsonDocument doc;
     if (deserializeJson(doc, data, len)) return;   // malformed; ignore
@@ -321,9 +345,48 @@ void WebApp::handle_ws_message(const uint8_t* data, size_t len)
     else if (!strcmp(cmd, "stop"))                  { a.kind = K::STOP;     }
     else if (!strcmp(cmd, "favorite") && track_ok)  { a.kind = K::FAVORITE;     a.arg = (uint8_t)track; }
     else if (!strcmp(cmd, "state"))                 { _broadcast_due = true; return; }
+    else if (!strcmp(cmd, "log_on"))                { subscribe_to_log(req); return; }
+    else if (!strcmp(cmd, "log_off"))               { req->sess_ctx = nullptr; return; }
     else return;   // unknown, or out of range
 
     if (_actions) xQueueSend(_actions, &a, 0);
+}
+
+
+/**
+ * Marks this phone as having the diagnostics panel open, and sends it the
+ * history so far. History goes up to the last line already pushed live, so
+ * nothing arrives twice; anything newer comes with the next push.
+ */
+void WebApp::subscribe_to_log(httpd_req_t* req)
+{
+    req->sess_ctx = &LOG_SUBSCRIBER;
+    req->free_ctx = keep_subscriber;
+
+    std::string lines;
+    logbook::copy(0, _log_sent, lines);
+    std::string msg = log_message("L", lines);
+
+    httpd_ws_frame_t frame = {};
+    frame.type    = HTTPD_WS_TYPE_TEXT;
+    frame.payload = reinterpret_cast<uint8_t*>(msg.data());
+    frame.len     = msg.size();
+    httpd_ws_send_frame(req, &frame);
+}
+
+
+/** Runs on the loop task: sends log lines added since the last push to every subscriber. */
+void WebApp::push_new_log_lines()
+{
+    const uint32_t newest = logbook::newest();
+    const uint32_t sent   = _log_sent;
+    if (newest == sent) return;
+
+    std::string lines;
+    logbook::copy(sent, newest, lines);
+    _log_sent = newest;
+
+    queue_send(log_message("l", lines), true);
 }
 
 
@@ -363,10 +426,17 @@ void WebApp::broadcast_now()
         _state_json = json;
     }
 
+    queue_send(std::string(json.c_str(), json.length()), false);
+}
+
+
+/** Hands a message to the server task, which is the only one allowed to send it. */
+void WebApp::queue_send(std::string text, bool log_only)
+{
     if (_https == nullptr) return;
 
-    auto* out = new Outgoing{ _https, std::string(json.c_str(), json.length()) };
+    auto* out = new Outgoing{ _https, std::move(text), log_only };
     if (httpd_queue_work(_https, send_to_all, out) != ESP_OK) {
-        delete out;   // queue full -- the next broadcast carries the same state anyway
+        delete out;   // queue full -- dropped; the next state push or log push catches up
     }
 }

@@ -16,3 +16,4 @@ certs/
 # Host test build output
 test/host/test_player
 test/host/test_frames
+test/host/test_logbook

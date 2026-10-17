@@ -16,9 +16,11 @@
 **************************************************************************/
 
 #include <Arduino.h>
+#include <esp_system.h>
 
 #include <config/secrets.h>
 #include <DFPlayerMini.h>
+#include <Logbook.h>
 #include <Player.h>
 #include <Net.h>
 #include <WebApp.h>
@@ -37,6 +39,23 @@ DFPlayerMini df_player(MCU_RX, MCU_TX);
 Player       player(df_player);
 Net          wifi_net(secrets::wifi_ssid, secrets::wifi_password, HOSTNAME);
 WebApp       web_app(player, wifi_net);
+
+
+/** Why the box last restarted, in words -- a crash or brownout overnight shows up here. */
+static const char* reset_reason()
+{
+    switch (esp_reset_reason()) {
+        case ESP_RST_POWERON:   return "power on";
+        case ESP_RST_SW:        return "software restart";
+        case ESP_RST_PANIC:     return "crash";
+        case ESP_RST_INT_WDT:
+        case ESP_RST_TASK_WDT:
+        case ESP_RST_WDT:       return "watchdog (hung)";
+        case ESP_RST_BROWNOUT:  return "brownout (power dipped)";
+        case ESP_RST_EXT:       return "reset pin";
+        default:                return "other";
+    }
+}
 
 
 static void apply(const WebApp::Action& a)
@@ -60,13 +79,13 @@ static void apply(const WebApp::Action& a)
 void setup()
 {
     Serial.begin(115200);
-    Serial.println("\n--- White Noise Machine booting ---");
+    logbook::add("Boot: firmware built " __DATE__ " " __TIME__ ", last reset: %s", reset_reason());
 
     player.begin();     // starts UART, restores saved track/volume/favorites
     wifi_net.begin();   // starts connecting; does not wait for it
     web_app.begin();    // server is up immediately, even before Wi-Fi lands
 
-    Serial.println("--- Boot complete (audio module warming up) ---");
+    logbook::add("Boot: done (audio module warming up)");
 }
 
 
