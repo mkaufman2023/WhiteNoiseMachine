@@ -414,7 +414,8 @@ function connect() {
   ws.onmessage = ev => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "s") { state = m; render(); }
-    else if (m.t === "l") { appendLog(m.m); }
+    else if (m.t === "L") { showLog(m.m); }     /* history, sent when the panel opens */
+    else if (m.t === "l") { appendLog(m.m); }   /* new lines since */
   };
 }
 
@@ -488,9 +489,15 @@ function renderDiag() {
   el("dUp").textContent = Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
 }
 
-function appendLog(line) {
+function showLog(lines) {
   const t = el("term");
-  t.textContent += "\n" + line;
+  t.textContent = lines || "(nothing logged yet)";
+  t.scrollTop = t.scrollHeight;
+}
+
+function appendLog(lines) {
+  const t = el("term");
+  t.textContent += "\n" + lines;
   if (t.textContent.length > 6000) t.textContent = t.textContent.slice(-4000);
   t.scrollTop = t.scrollHeight;
 }

@@ -10,6 +10,7 @@
 
 #include "Player.h"
 #include <DFPlayerMini.h>
+#include <Logbook.h>
 
 
 Player::Player(DFPlayerMini& player) : _df(player) { }
@@ -42,6 +43,7 @@ void Player::tick()
 
         _warm = true;
         update_hw();
+        logbook::add("Audio: warm-up done%s", _heard ? " (the module said hello)" : "");
 
         // No set-source or power-on-volume commands: the SD card is the only
         // source, and the volume is always set to 0 before anything plays.
@@ -244,6 +246,9 @@ void Player::start_playback(Cmd cmd, uint8_t arg)
     _s.playing = true;
     _seq       = Seq::IN;
     begin_fade(_s.volume);
+
+    logbook::add("Audio: %s track %d, fading up to %d",
+                 cmd == Cmd::PLAY ? "unpausing" : "starting", _s.track, _s.volume);
 }
 
 
@@ -259,12 +264,14 @@ void Player::advance_sequence()
             queue_push(Cmd::PAUSE);
             _paused = true;
             _seq    = Seq::IDLE;
+            logbook::add("Audio: faded out, paused");
             break;
 
         case Seq::OUT_TO_STOP:
             queue_push(Cmd::STOP);
             _paused = false;
             _seq    = Seq::IDLE;
+            logbook::add("Audio: faded out, stopped");
             break;
 
         case Seq::IN:
@@ -286,11 +293,14 @@ void Player::handle_reply(const dfplayer::Frame& f, uint32_t now)
 {
     using namespace dfplayer::cmd;
 
+    if (_fault) logbook::add("Audio: the module is answering again");
+
     _heard = true;
     _fault = false;
 
     switch (f.cmd) {
         case RESPONSE:              // 0x41 -- "got it"
+            if (!_acked) logbook::add("Audio: the module confirms commands -- pacing by its replies");
             _acked    = true;
             _give_ups = 0;
 
@@ -305,20 +315,33 @@ void Player::handle_reply(const dfplayer::Frame& f, uint32_t now)
             break;
 
         case ERROR_RESEND:          // 0x40 -- the module rejected the frame
-            if (_awaiting_ack) _t_sent = now - ACK_TIMEOUT_MS;   // resend now, don't wait out the timeout
+            if (_awaiting_ack) {
+                logbook::add("Audio: the module rejected %s, resending", name_of(_cur.cmd));
+                _t_sent = now - ACK_TIMEOUT_MS;         // resend now, don't wait out the timeout
+            }
             break;
 
         case QU_TF_SD_COMPL:        // 0x3D -- the track finished
             // In loop mode this shouldn't happen. If it does the sound has
             // stopped, so start it again: white noise mustn't quietly end at 3 a.m.
             if (_s.playing && _seq == Seq::IDLE && (now - _t_last_heal) >= HEAL_DEBOUNCE_MS) {
+                logbook::add("Audio: the module says the track ended -- restarting it");
                 queue_push(Cmd::LOOP_TRACK, _s.track);
                 _t_last_heal = now;
             }
             break;
 
         case SEND_INIT_PARAMS:      // 0x3F -- the module (re)started and forgot everything
+            logbook::add("Audio: the module restarted itself%s", _s.playing ? " -- starting the sound again" : "");
             if (_s.playing) start_playback(Cmd::LOOP_TRACK, _s.track);
+            break;
+
+        case QU_DEV_INSERTED:       // 0x3A
+            logbook::add("Audio: SD card inserted");
+            break;
+
+        case QU_DEV_UNPLUGGED:      // 0x3B
+            logbook::add("Audio: SD card removed");
             break;
 
         default:
@@ -346,6 +369,8 @@ void Player::dispatch(uint32_t now)
 
         if (!superseded) {
             if (_cur_tries < MAX_TRIES) {
+                logbook::add("Audio: no reply to %s, resending (try %d of %d)",
+                             name_of(_cur.cmd), _cur_tries + 1, MAX_TRIES);
                 send(now);                              // lost or rejected: resend it
                 return;
             }
@@ -390,13 +415,30 @@ void Player::send(uint32_t now)
 
 void Player::give_up()
 {
+    logbook::add("Audio: gave up on %s after %d tries", name_of(_cur.cmd), MAX_TRIES);
+
     if (++_give_ups < FAULT_AFTER) return;
 
     // The module has stopped answering. Report it, and fall back to fixed
     // timings so commands keep flowing; its next reply undoes both.
+    logbook::add("Audio: the module stopped replying -- using fixed timings");
     _fault = true;
     _acked = false;
     update_hw();
+}
+
+
+const char* Player::name_of(Cmd c)
+{
+    switch (c) {
+        case Cmd::SET_VOL:    return "volume";
+        case Cmd::LOOP_TRACK: return "track start";
+        case Cmd::PLAY:       return "unpause";
+        case Cmd::PAUSE:      return "pause";
+        case Cmd::STOP:       return "stop";
+        case Cmd::NONE:
+        default:              return "command";
+    }
 }
 
 
@@ -458,7 +500,9 @@ void Player::mark_dirty()
 
 void Player::load_state()
 {
-    _nvs.begin("wnm", true);   // read-only
+    // Opened read-write so the very first boot creates the namespace instead
+    // of logging a "not found" error; nothing is written here.
+    _nvs.begin("wnm", false);
 
     _s.track     = (uint8_t) _nvs.getUChar("track", 1);
     _s.volume    = (uint8_t) _nvs.getUChar("volume", 12);
@@ -471,6 +515,9 @@ void Player::load_state()
     if (_s.volume > VOL_MAX)                    _s.volume = 12;
 
     _s.volume_now = 0;
+
+    logbook::add("Settings: restored track %d, volume %d, %s",
+                 _s.track, _s.volume, _s.playing ? "playing" : "not playing");
 }
 
 
@@ -484,4 +531,7 @@ void Player::save_state()
     _nvs.putULong("favs",    _s.favorites);
 
     _nvs.end();
+
+    logbook::add("Settings: saved track %d, volume %d, %s",
+                 _s.track, _s.volume, _s.playing ? "playing" : "not playing");
 }

@@ -172,6 +172,7 @@ private:
     void send(uint32_t now);
     void give_up();
     void update_hw();
+    static const char* name_of(Cmd c);
     void transmit(const QCmd& c);
     void start_playback(Cmd cmd, uint8_t arg = 0);
     void advance_sequence();

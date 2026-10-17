@@ -11,6 +11,7 @@
 
 #include <WiFi.h>
 #include <ESPmDNS.h>
+#include <Logbook.h>
 
 
 Net::Net(const char* ssid, const char* password, const char* hostname)
@@ -49,7 +50,7 @@ void Net::tick()
     // timeout while the router reboots). If we've been down this long, it has
     // given up -- start over.
     if (!_up && (millis() - _t_down) >= RESTART_AFTER_MS) {
-        Serial.println("Net: still offline, restarting the connection");
+        logbook::add("Net: still offline, restarting the connection");
         WiFi.disconnect();
         connect();
     }
@@ -84,7 +85,7 @@ bool Net::consume_link_change()
 
 void Net::connect()
 {
-    Serial.println("Net: connecting to " + String(_ssid));
+    logbook::add("Net: connecting to %s", _ssid);
 
     WiFi.begin(_ssid, _password);
     _t_down = millis();
@@ -93,8 +94,7 @@ void Net::connect()
 
 void Net::on_up()
 {
-    Serial.println("Net: online as " + WiFi.localIP().toString() +
-                   " (" + String(WiFi.RSSI()) + " dBm)");
+    logbook::add("Net: online as %s (%d dBm)", WiFi.localIP().toString().c_str(), (int)WiFi.RSSI());
 
     start_mdns();
 }
@@ -102,7 +102,7 @@ void Net::on_up()
 
 void Net::on_down()
 {
-    Serial.println("Net: link lost");
+    logbook::add("Net: link lost");
 
     _mdns_up = false;
     _t_down  = millis();
@@ -116,7 +116,7 @@ void Net::start_mdns()
     MDNS.end();          // safe to call when not running; clears stale records
 
     if (!MDNS.begin(_hostname)) {
-        Serial.println("Net: mDNS failed to start");
+        logbook::add("Net: mDNS failed to start");
         _mdns_up = false;
         return;
     }
@@ -124,5 +124,5 @@ void Net::start_mdns()
     MDNS.addService("https", "tcp", 443);
     _mdns_up = true;
 
-    Serial.println("Net: mDNS up at https://" + String(_hostname) + ".local");
+    logbook::add("Net: mDNS up at https://%s.local", _hostname);
 }
