@@ -82,7 +82,14 @@ header {
   padding-bottom: 0.9rem;
   border-bottom: 1px solid var(--rule);
 }
-#brand { user-select: none; cursor: default; }
+#brand { cursor: default; }
+
+/* Things you press and hold: no iOS text-selection or callout popup. */
+#brand, .fav, .list button {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
 
 .lamp {
   display: flex;
@@ -366,7 +373,8 @@ footer button[data-on="1"] { color: var(--accent); border-color: var(--accent); 
     <span>mDNS</span><span id="dMdns">&mdash;</span>
     <span>Audio module</span><span id="dHw">&mdash;</span>
     <span>Uptime</span><span id="dUp">&mdash;</span>
-    <span>File</span><span id="dFile">&mdash;</span>
+    <span>Track</span><span id="dTrack">&mdash;</span>
+    <span>UI build</span><span id="dUi">&mdash;</span>
   </div>
   <div id="term" class="mono">Diagnostics open. Log streaming.</div>
 </section>
@@ -374,7 +382,8 @@ footer button[data-on="1"] { color: var(--accent); border-color: var(--accent); 
 <script>
 "use strict";
 
-/* Track list. Index matches /mp3/000N.mp3 on the SD card. */
+/* Track list. Track N is the Nth file copied onto the SD card -- the module
+   numbers files in the order they were copied, not by name. */
 const SOUNDS = [
   [1,  "Airplane Cabin"], [2,  "Celestial"],     [3,  "Thunderstorm"],
   [4,  "Rain"],           [5,  "Rainforest"],    [6,  "Waterfall"],
@@ -383,7 +392,7 @@ const SOUNDS = [
   [13, "Vacuum"],         [14, "Soup"]
 ];
 const NAME = new Map(SOUNDS);
-const pad4 = n => String(n).padStart(4, "0");
+const pad2 = n => String(n).padStart(2, "0");
 
 const el = id => document.getElementById(id);
 let ws = null, backoff = 500, dragging = false, lastSent = 0, diagOpen = false;
@@ -436,7 +445,7 @@ function render() {
   el("nowMeta").textContent =
         state.hw === HW_WARMING ? "Warming up"
       : state.hw === HW_FAULT   ? "Audio module not responding"
-      : (state.play ? "Looping \u00b7 file " + pad4(state.trk) : "Paused");
+      : (state.play ? "Looping \u00b7 track " + pad2(state.trk) : "Paused");
 
   const t = el("btnToggle");
   t.textContent = state.play ? "Pause" : "Play";
@@ -461,22 +470,34 @@ function render() {
 
 const isFav = n => (state.favs & (1 << (n - 1))) !== 0;
 
-function renderFavorites() {
-  const pinned = SOUNDS.filter(([n]) => isFav(n));
-  el("favBlock").hidden = pinned.length === 0;
+/* Rebuilt only when the set of pins changes. State arrives every ~50 ms
+   during a fade; rebuilding on each one destroyed the button under a finger
+   mid-press, so the press never ended and the hold-to-unpin timer fired. */
+let shownFavs = -1;
 
+function renderFavorites() {
   const grid = el("favGrid");
-  grid.textContent = "";
-  for (const [n, name] of pinned) {
-    const b = document.createElement("button");
-    b.className = "fav";
-    b.dataset.track = n;
-    b.dataset.active = (n === state.trk && state.play) ? "1" : "0";
-    b.innerHTML = '<span class="n"></span><span class="f mono">File ' + pad4(n) + "</span>";
-    b.querySelector(".n").textContent = name;
-    bindSound(b, n);
-    grid.appendChild(b);
+
+  if (state.favs !== shownFavs) {
+    shownFavs = state.favs;
+    const pinned = SOUNDS.filter(([n]) => isFav(n));
+    el("favBlock").hidden = pinned.length === 0;
+
+    grid.textContent = "";
+    for (const [n, name] of pinned) {
+      const b = document.createElement("button");
+      b.className = "fav";
+      b.dataset.track = n;
+      b.innerHTML = '<span class="n"></span><span class="f mono">Track ' + pad2(n) + "</span>";
+      b.querySelector(".n").textContent = name;
+      bindSound(b, n);
+      grid.appendChild(b);
+    }
   }
+
+  grid.querySelectorAll("button").forEach(b => {
+    b.dataset.active = (Number(b.dataset.track) === state.trk && state.play) ? "1" : "0";
+  });
 }
 
 function renderDiag() {
@@ -484,7 +505,8 @@ function renderDiag() {
   el("dRssi").textContent = state.rssi ? state.rssi + " dBm" : "\u2014";
   el("dMdns").textContent = state.mdns ? "whitenoise.local" : "down";
   el("dHw").textContent   = HW_TEXT[state.hw] || "\u2014";
-  el("dFile").textContent = "/mp3/" + pad4(state.trk) + ".mp3";
+  el("dTrack").textContent = pad2(state.trk) + " (copy order on the card)";
+  el("dUi").textContent    = state.ui || "\u2014";
   const s = state.up || 0;
   el("dUp").textContent = Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
 }
@@ -511,7 +533,7 @@ function buildList() {
     b.dataset.track = n;
     b.dataset.active = "0";
     b.innerHTML = '<span><span class="pin mono"></span><span class="nm"></span></span>' +
-                  '<span class="file mono">' + pad4(n) + "</span>";
+                  '<span class="file mono">' + pad2(n) + "</span>";
     b.querySelector(".nm").textContent = name;
     bindSound(b, n);
     li.appendChild(b);
@@ -611,8 +633,20 @@ buildList();
 render();
 connect();
 
+/* The service worker keeps a copy of the app so it opens instantly, even with
+   the box off. After a firmware update changes the UI, the box serves a sw.js
+   with a new fingerprint; the browser installs it in the background, and this
+   page reloads once to show the new version. ("updateViaCache: none" makes
+   the browser check sw.js on every launch rather than once a day.) */
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js").catch(() => {});
+  const hadWorker = !!navigator.serviceWorker.controller;   // false on the very first visit
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadWorker || reloading) return;
+    reloading = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
 }
 </script>
 </body>

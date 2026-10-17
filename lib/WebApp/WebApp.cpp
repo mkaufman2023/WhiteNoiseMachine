@@ -89,6 +89,18 @@ namespace
         serializeJson(doc, out);
         return out;
     }
+
+    /** FNV-1a hash over every built-in web file: it changes whenever any of them does. */
+    uint32_t web_fingerprint()
+    {
+        uint32_t h = 2166136261u;
+        for (const Asset& a : ASSETS) {
+            for (const uint8_t* p = a.start; p < a.end; p++) {
+                h = (h ^ *p) * 16777619u;
+            }
+        }
+        return h;
+    }
 }
 
 
@@ -99,6 +111,16 @@ WebApp::WebApp(Player& player, Net& net)
 void WebApp::begin()
 {
     _actions = xQueueCreate(ACTION_QUEUE_LEN, sizeof(Action));
+
+    // sw.js goes out with the UI's fingerprint appended. When an update
+    // changes any web file, the phones see a "new" service worker and pick
+    // up the new UI by themselves (see web/sw.js).
+    snprintf(_ui_build, sizeof(_ui_build), "%08lx", (unsigned long)web_fingerprint());
+    _sw_js.assign(reinterpret_cast<const char*>(sw_js_start), sw_js_end - sw_js_start);
+    _sw_js += "\n// build ";
+    _sw_js += _ui_build;
+    _sw_js += "\n";
+    logbook::add("Web: UI build %s", _ui_build);
 
     build_state_json(_state_json);   // so /api/state answers before the first broadcast
 
@@ -218,12 +240,17 @@ bool WebApp::start_redirect()
 
 esp_err_t WebApp::on_asset(httpd_req_t* req)
 {
-    const size_t len = strcspn(req->uri, "?#");   // ignore any query string
+    WebApp*      self = static_cast<WebApp*>(req->user_ctx);
+    const size_t len  = strcspn(req->uri, "?#");   // ignore any query string
 
     for (const Asset& a : ASSETS) {
         if (strlen(a.path) == len && strncmp(a.path, req->uri, len) == 0) {
             httpd_resp_set_type(req, a.type);
             httpd_resp_set_hdr(req, "Cache-Control", a.cache);
+
+            if (a.start == sw_js_start) {   // with the UI fingerprint appended
+                return httpd_resp_send(req, self->_sw_js.data(), self->_sw_js.size());
+            }
             return httpd_resp_send(req, reinterpret_cast<const char*>(a.start), a.end - a.start);
         }
     }
@@ -407,6 +434,7 @@ void WebApp::build_state_json(String& out)
     doc["ip"]    = _net.ip();
     doc["mdns"]  = _net.mdns_up();
     doc["up"]    = millis() / 1000;
+    doc["ui"]    = _ui_build;      // fingerprint of the built-in web files
 
     serializeJson(doc, out);
 }

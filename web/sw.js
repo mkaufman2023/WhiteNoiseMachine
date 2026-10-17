@@ -8,10 +8,14 @@
  * instantly from cache and shows "Not linked" in its own voice, then connects
  * itself as soon as the box answers.
  *
- * Bump CACHE when anything in web/ changes, or phones will keep the old shell.
+ * Updates take care of themselves: the box appends a fingerprint of all its
+ * built-in web files to this script when it serves it ("// build ..." at the
+ * end). When a firmware update changes the UI, the fingerprint changes, the
+ * browser sees a new service worker, installs it (re-fetching the shell), and
+ * the page reloads once onto the new version. Nothing to bump by hand.
  */
 
-const CACHE = "wnm-v2";
+const CACHE = "wnm-shell";
 const SHELL = [
   "/",
   "/index.html",
@@ -22,9 +26,11 @@ const SHELL = [
 ];
 
 self.addEventListener("install", event => {
+  // "reload" skips the browser's HTTP cache, so a new version never picks up
+  // last week's icons or page.
   event.waitUntil(
     caches.open(CACHE)
-      .then(c => c.addAll(SHELL))
+      .then(c => c.addAll(SHELL.map(url => new Request(url, { cache: "reload" }))))
       .then(() => self.skipWaiting())
   );
 });
